@@ -1,0 +1,11 @@
+# Relais public : reçoit les clients et les renvoie dans le premier tunnel WireGuard en vie.
+# Caddy remplace X-Forwarded-For par l'adresse réelle du client (aucun trusted_proxies ici : un en-tête
+# fourni par le client est jeté).
+app.example.com {
+	reverse_proxy 10.99.1.2:80 10.99.2.2:80 10.99.3.2:80 {
+		lb_policy first
+		health_uri /healthz
+		health_interval 5s
+		health_timeout 3s
+	}
+}

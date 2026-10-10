@@ -1,0 +1,73 @@
+# Firewall du namespace gateway (= namespace de l'application).
+# Chargé par entrypoint.sh avec : nft -D LAN=... -D INGRESS=... -D APP_PORT=... -D NEXTHOPS='{ ip1, ip2, ... }'
+# Les deux lignes `@ALLOW_IN@` et `@ALLOW_OUT@` sont remplacées par l'entrypoint (ALLOW_IN, ALLOW_OUT).
+# Le trafic de l'app est du trafic LOCAL (OUTPUT) de ce namespace, pas du FORWARD.
+# Seule la table "inet vpngw" est gérée : les règles NAT du DNS embarqué Docker (127.0.0.11) ne sont pas touchées.
+
+table inet vpngw
+delete table inet vpngw
+
+table inet vpngw {
+	set nexthops {
+		type ipv4_addr
+		elements = $NEXTHOPS
+	}
+
+	# Ouvertures supplémentaires, en couples adresse . port (voir ALLOW_IN et ALLOW_OUT).
+	set allow_in {
+		type ipv4_addr . inet_service
+		# @ALLOW_IN@
+	}
+
+	set allow_out {
+		type ipv4_addr . inet_service
+		# @ALLOW_OUT@
+	}
+
+	chain input {
+		type filter hook input priority filter; policy drop;
+		iif "lo" accept
+		ct state invalid drop
+		ct state established,related accept
+		meta nfproto ipv6 drop
+		# Le reverse proxy d'entrée ouvre vers l'application ; ALLOW_IN ajoute d'autres couples source . port.
+		iifname "eth0" ip saddr $INGRESS tcp dport $APP_PORT ct state new accept
+		iifname "eth0" ip saddr . tcp dport @allow_in ct state new accept
+	}
+
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+	}
+
+	chain output {
+		type filter hook output priority filter; policy drop;
+
+		# DNS embarqué Docker : il résout via le resolver du host -> fuite DNS possible. Interdit.
+		ip daddr 127.0.0.11 drop
+		oif "lo" accept
+
+		meta nfproto ipv6 drop
+		ct state invalid drop
+		ct state established,related accept
+
+		# tout ce qui n'est pas eth0 est interdit
+		oifname != "eth0" drop
+
+		# DNS : uniquement vers les serveurs DNS internes des Gluetun (résolution DoT dans le tunnel)
+		ip daddr @nexthops meta l4proto { tcp, udp } th dport 53 accept
+		meta l4proto { tcp, udp } th dport { 53, 853 } drop
+
+		# sonde de joignabilité L3 des Gluetun
+		ip daddr @nexthops icmp type echo-request accept
+
+		# Services du LAN que l'application a le droit d'appeler (ALLOW_OUT).
+		ip daddr . tcp dport @allow_out accept
+
+		# aucune autre connexion vers le LAN Docker (bridge/host 172.30.20.1, proxy d'entrée, Gluetun)
+		ip daddr $LAN drop
+
+		# Internet : uniquement si le next-hop résolu par le routage est un Gluetun.
+		# Toute autre route (ex. ajoutée via le bridge Docker) est bloquée ici.
+		rt ip nexthop @nexthops accept
+	}
+}

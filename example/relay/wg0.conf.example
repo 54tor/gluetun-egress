@@ -1,0 +1,22 @@
+# /etc/wireguard/wg0.conf du relais (wg-quick up wg0). Ouvrir UDP 51820 et TCP 80/443.
+[Interface]
+Address = 10.99.0.1/24
+ListenPort = 51820
+PrivateKey = CLE_PRIVEE_DU_RELAIS
+
+# Un pair par wgentryN : sa clé publique, son adresse dans le tunnel. Pas d'Endpoint : le pair
+# se connecte, depuis la sortie de son VPN.
+[Peer]
+# wgentry1
+PublicKey = CLE_PUBLIQUE_DU_TUNNEL_1
+AllowedIPs = 10.99.1.2/32
+
+[Peer]
+# wgentry2
+PublicKey = CLE_PUBLIQUE_DU_TUNNEL_2
+AllowedIPs = 10.99.2.2/32
+
+[Peer]
+# wgentry3
+PublicKey = CLE_PUBLIQUE_DU_TUNNEL_3
+AllowedIPs = 10.99.3.2/32

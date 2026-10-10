@@ -1,0 +1,167 @@
+# Versions supposées : Docker Engine >= 28 (testé 29.8.1), Docker Compose >= 2.24 (testé 5.5.1),
+# Testé avec Gluetun v3.41.3 ; les images ne sont pas épinglées.
+#
+# Plan d'adressage (doit rester cohérent avec .env, gateway/*, gluetun*/iptables/*, traefik/*) :
+#   frontend    172.30.10.0/24  traefik .10 | gluetun1 .11 | gluetun2 .12 | gluetun3 .13
+#   vpn-gateway 172.30.20.0/24  gateway .2  | traefik  .10 | gluetun1 .11 | gluetun2 .12 | gluetun3 .13  (internal)
+
+name: vpnstack
+
+x-wgentry: &wgentry
+  # Tunnel WireGuard sortant vers le relais (wireproxy, en espace utilisateur), dans la pile du Gluetun : l'UDP sort par son VPN.
+  image: ghcr.io/windtf/wireproxy:latest
+  # Aucune capacité : NET_RAW (défaut Docker) permettrait de contourner nftables et d'usurper l'ARP sur vpn-gateway.
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+
+services:
+  gluetun1:
+    image: qmcgaw/gluetun:latest
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun:/dev/net/tun]
+    sysctls:
+      net.ipv4.ip_forward: "1"          # forwarding gateway -> tun0 (policy FORWARD reste DROP)
+    env_file: [.env.vpn1]               # VPN_SERVICE_PROVIDER, VPN_TYPE, clés/identifiants du fournisseur 1
+    environment:
+      VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
+      TZ: ${TZ}
+    volumes:
+      - ../gluetun/post-rules-1.txt:/iptables/post-rules.txt:ro
+    networks:
+      frontend:    { ipv4_address: 172.30.10.11 }
+      vpn-gateway: { ipv4_address: 172.30.20.11 }
+    restart: unless-stopped
+
+  gluetun2:
+    image: qmcgaw/gluetun:latest
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun:/dev/net/tun]
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    env_file: [.env.vpn2]
+    environment:
+      VPN_INTERFACE: tun0
+      TZ: ${TZ}
+    volumes:
+      - ../gluetun/post-rules-2.txt:/iptables/post-rules.txt:ro
+    networks:
+      frontend:    { ipv4_address: 172.30.10.12 }
+      vpn-gateway: { ipv4_address: 172.30.20.12 }
+    restart: unless-stopped
+
+  gluetun3:
+    image: qmcgaw/gluetun:latest
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun:/dev/net/tun]
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    env_file: [.env.vpn3]
+    environment:
+      VPN_INTERFACE: tun0
+      TZ: ${TZ}
+    volumes:
+      - ../gluetun/post-rules-3.txt:/iptables/post-rules.txt:ro
+    networks:
+      frontend:    { ipv4_address: 172.30.10.13 }
+      vpn-gateway: { ipv4_address: 172.30.20.13 }
+    restart: unless-stopped
+  wgentry1:
+    <<: *wgentry
+    network_mode: "service:gluetun1"
+    volumes:
+      - ./wgentry/wg1.conf:/etc/wireproxy/config:ro   # clé du tunnel, droits 600, propriétaire uid 65532
+    depends_on:
+      gluetun1: { condition: service_healthy, restart: true }
+
+  wgentry2:
+    <<: *wgentry
+    network_mode: "service:gluetun2"
+    volumes:
+      - ./wgentry/wg2.conf:/etc/wireproxy/config:ro   # clé du tunnel, droits 600, propriétaire uid 65532
+    depends_on:
+      gluetun2: { condition: service_healthy, restart: true }
+
+  wgentry3:
+    <<: *wgentry
+    network_mode: "service:gluetun3"
+    volumes:
+      - ./wgentry/wg3.conf:/etc/wireproxy/config:ro   # clé du tunnel, droits 600, propriétaire uid 65532
+    depends_on:
+      gluetun3: { condition: service_healthy, restart: true }
+
+  traefik:
+    image: traefik:latest
+    command:
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.forwardedHeaders.trustedIPs=172.30.10.11,172.30.10.12,172.30.10.13
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --ping=true
+      - --log.level=INFO
+    environment:
+      APP_PORT: ${APP_PORT}             # lu par traefik/dynamic/app.yml (templating Go)
+    volumes:
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+    networks:
+      frontend:    { ipv4_address: 172.30.10.10 }   # entrée depuis wgentry ; route par défaut de Traefik
+      vpn-gateway: { ipv4_address: 172.30.20.10 }   # accès direct L2 à l'application (172.30.20.2)
+    restart: unless-stopped
+
+  gateway:
+    build: ../gateway
+    cap_add: [NET_ADMIN]
+    sysctls:
+      net.ipv4.ip_forward: "0"                  # l'app est locale au namespace : rien à forwarder
+      # rp_filter : en état "aucun VPN" la table main n'a qu'une route unreachable ; le filtre
+      # rejetterait alors les réponses des sondes (routées par uid vers les tables 101/102).
+      # Valeur effective = max(all, eth0) : all ici, eth0 via driver_opts du réseau (voir plus bas).
+      net.ipv4.conf.all.rp_filter: "0"
+      net.ipv6.conf.all.disable_ipv6: "1"
+      net.ipv6.conf.default.disable_ipv6: "1"
+    environment:
+      APP_PORT: ${APP_PORT}
+      # Couples « ip:port » en plus de Traefik -> APP_PORT. Vides ici : l'application d'exemple n'en a pas besoin.
+      ALLOW_IN: ""          # ex. "172.30.20.11:4041" : un second client du LAN qui appelle l'application
+      ALLOW_OUT: ""         # ex. "172.30.20.20:6379" : un service du LAN que l'application appelle
+      LAN_SUBNET: 172.30.20.0/24
+      INGRESS_IP: 172.30.20.10
+      VPN_IPS: 172.30.20.11 172.30.20.12 172.30.20.13   # ordre = priorité (nord, proton, custom)
+      PROBE_URLS: ${PROBE_URLS}
+      PROBE_INTERVAL: ${PROBE_INTERVAL}
+      PROBE_TIMEOUT: ${PROBE_TIMEOUT}
+      FAIL_THRESHOLD: ${FAIL_THRESHOLD}
+      RISE_THRESHOLD: ${RISE_THRESHOLD}
+    healthcheck:
+      # "healthy" = firewall fail-closed chargé (PAS "un VPN est up") : l'app peut démarrer sans risque.
+      test: ["CMD", "nft", "list", "table", "inet", "vpngw"]
+      interval: 10s
+      start_period: 5s
+    networks:
+      vpn-gateway:                                  # UNIQUE réseau -> seul eth0 visible par l'app
+        ipv4_address: 172.30.20.2
+        driver_opts:
+          com.docker.network.endpoint.sysctls: net.ipv4.conf.IFNAME.rp_filter=0
+    restart: unless-stopped
+
+  app:
+    image: traefik/whoami:latest          # remplacer par l'application réelle
+    command: ["--port", "${APP_PORT}"]
+    network_mode: "service:gateway"      # partage netns, /etc/resolv.conf et /etc/hosts du gateway
+    depends_on:
+      gateway: { condition: service_healthy, restart: true }
+    restart: unless-stopped
+
+networks:
+  frontend:
+    driver: bridge
+    ipam:
+      config: [{ subnet: 172.30.10.0/24, gateway: 172.30.10.1 }]
+  vpn-gateway:
+    driver: bridge
+    internal: true                       # aucune route vers l'Internet du host, isolation Docker côté host
+    ipam:
+      config: [{ subnet: 172.30.20.0/24, gateway: 172.30.20.1 }]

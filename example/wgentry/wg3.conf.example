@@ -1,0 +1,15 @@
+# Copier en wg3.conf (droits 600, propriétaire uid 65532) et renseigner les trois valeurs.
+[Interface]
+Address = 10.99.3.2/32
+PrivateKey = CLE_PRIVEE_DU_TUNNEL_3
+
+[Peer]
+PublicKey = CLE_PUBLIQUE_DU_RELAIS
+Endpoint = relais.example.com:51820
+AllowedIPs = 10.99.0.1/32
+PersistentKeepalive = 25
+
+# Écoute côté WireGuard (10.99.3.2:80) et relaie vers Caddy, depuis la pile du Gluetun 3.
+[TCPServerTunnel]
+ListenPort = 80
+Target = 172.30.10.10:80
