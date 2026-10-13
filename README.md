@@ -455,8 +455,10 @@ cause rien : sans Gluetun, rien ne sort (`unreachable`, réseau `internal`).
   iptables -I DOCKER-USER -s 172.30.0.0/16 ! -o vpngw+ -j DROP
   ```
 
-  ⚠️ L'essai a porté sur la forme précise (`-s <sous-réseau du vpn-gateway> ! -o <son bridge>`), pas sur cette forme
-  générique (`vpngw+`, plage commune), à rejouer avant de l'adopter. Une seule règle suffit pour plusieurs piles si chaque réseau `vpn-gateway` tient dans la plage `172.30.0.0/16` (et
+  La forme générique ci-dessus (plage commune, bridge `vpngw+`) a aussi été éprouvée le 2026-10-14, sur une plage de
+  test : 0 paquet sorti sur 8 essais, 6 et 49 paquets sans la règle, 44 jetés au compteur. ⚠️ Poser cette règle avec une
+  plage qui contient des piles existantes avant de leur avoir donné un bridge `vpngw-…` risque de couper leur trafic
+  interne, puisque `br_netfilter` fait traverser `DOCKER-USER` au trafic d'un bridge vers lui-même (non mesuré). Une seule règle suffit pour plusieurs piles si chaque réseau `vpn-gateway` tient dans la plage `172.30.0.0/16` (et
   rien d'autre) et déclare `com.docker.network.bridge.name: vpngw-<pile>`. `DOCKER-USER` est vidée au redémarrage du
   démon Docker : à poser par un service systemd ou la configuration nftables de l'hôte.
 
