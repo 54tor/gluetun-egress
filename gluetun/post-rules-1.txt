@@ -5,3 +5,14 @@ iptables -A FORWARD -i tun0 -o eth+ -d 172.30.20.2/32 -m conntrack --ctstate EST
 iptables -t nat -A POSTROUTING -s 172.30.20.2/32 -o tun0 -j MASQUERADE
 iptables -t mangle -A FORWARD -o tun0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 iptables -t mangle -A FORWARD -i tun0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+ip6tables -P FORWARD DROP
+ip6tables -I INPUT -i eth+ -p icmpv6 --icmpv6-type neighbour-solicitation -j ACCEPT
+ip6tables -I INPUT -i eth+ -p icmpv6 --icmpv6-type neighbour-advertisement -j ACCEPT
+ip6tables -I OUTPUT -o eth+ -p icmpv6 --icmpv6-type neighbour-solicitation -j ACCEPT
+ip6tables -I OUTPUT -o eth+ -p icmpv6 --icmpv6-type neighbour-advertisement -j ACCEPT
+ip6tables -I INPUT -i eth+ -d fd30:20::11/128 ! -s fd30:20::2/128 -j DROP
+ip6tables -A FORWARD -i eth+ -s fd30:20::2/128 -o tun0 -j ACCEPT
+ip6tables -A FORWARD -i tun0 -o eth+ -d fd30:20::2/128 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+ip6tables -t nat -A POSTROUTING -s fd30:20::2/128 -o tun0 -j MASQUERADE
+ip6tables -t mangle -A FORWARD -o tun0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+ip6tables -t mangle -A FORWARD -i tun0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu

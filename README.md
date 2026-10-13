@@ -227,7 +227,7 @@ WIREGUARD_ENDPOINT_IP=203.0.113.10  # [Peer] Endpoint résolu en IP (getent ahos
 WIREGUARD_ENDPOINT_PORT=51820
 ```
 Gluetun v3.41.3 exige une **IP** d'endpoint (pas de nom d'hôte) et refuse une adresse IPv6
-d'interface quand l'IPv6 n'est pas supportée. La ligne `DNS =` du profil est ignorée : Gluetun
+d'interface quand l'IPv6 n'est pas supportée (voir §4.5). La ligne `DNS =` du profil est ignorée : Gluetun
 utilise son propre DNS.
 
 **Filtres de serveurs** : `SERVER_COUNTRIES`, `SERVER_CITIES`, etc. se **cumulent** (ET logique).
@@ -338,9 +338,9 @@ Une seule table, `inet vpngw` (les règles NAT du DNS embarqué Docker ne sont p
 
 | Chaîne | Politique | Règles |
 |---|---|---|
-| `input` | drop | `lo` ; `established,related` ; IPv6 drop ; **seul le proxy d'entrée (`INGRESS_IP`, 172.30.20.10) peut ouvrir une connexion, sur `APP_PORT`, plus les couples de `ALLOW_IN`** |
+| `input` | drop | `lo` ; `established,related` ; découverte de voisins IPv6 seulement (rien d'autre n'entre en IPv6) ; **seul le proxy d'entrée (`INGRESS_IP`, 172.30.20.10) peut ouvrir une connexion, sur `APP_PORT`, plus les couples de `ALLOW_IN`** |
 | `forward` | drop | aucune |
-| `output` | drop | `127.0.0.11` drop (DNS embarqué Docker) ; `lo` ; IPv6 drop ; `established,related` ; rien hors `eth0` ; DNS (53) seulement vers les Gluetun ; tout autre 53/853 drop ; ping vers les Gluetun ; rien d'autre vers le LAN Docker, hors `ALLOW_OUT` ; **Internet seulement si le next-hop routé est un Gluetun** (`rt ip nexthop @nexthops`) |
+| `output` | drop | `127.0.0.11` drop (DNS embarqué Docker) ; `lo` ; `established,related` ; découverte de voisins IPv6 ; rien hors `eth0` ; DNS (53) seulement vers les Gluetun ; tout autre 53/853 drop ; ping vers les Gluetun ; rien d'autre vers le LAN Docker (IPv4 et IPv6), hors `ALLOW_OUT` ; **Internet seulement si le next-hop routé est un Gluetun** (`rt ip nexthop @nexthops` et `rt ip6 nexthop @nexthops6`) |
 
 La dernière règle bloque toute sortie par une route qui ne passerait pas par un Gluetun, même si
 quelqu'un ajoutait `default via 172.30.20.1` dans le namespace.
@@ -392,16 +392,33 @@ plus la règle `-o tun0` et la politique DROP le jette. **Aucune fuite possible 
 
 ### 4.5 IPv6
 
-Désactivé dans le namespace gateway/app (`disable_ipv6=1`), bloqué par nftables, et bloqué par
-Gluetun (politiques ip6tables DROP). Aucun réseau Docker n'a `enable_ipv6`.
+Facultative, et fail-closed comme l'IPv4 : sans `VPN_IPS6`, l'ensemble `@nexthops6` est vide, aucune route IPv6
+n'est posée et toute sortie IPv6 est refusée.
+
+- **Adressage** : le réseau `vpn-gateway` porte aussi un sous-réseau ULA (`fd30:20::/64` dans l'exemple),
+  `enable_ipv6: true`.
+- **NAT66** : Proton ne donne qu'une adresse IPv6 `/128` par tunnel. Chaque Gluetun traduit l'adresse ULA du
+  gateway vers `tun0` (`ip6tables … MASQUERADE` dans `post-rules-N.txt`), comme en IPv4.
+- **Un Gluetun a de l'IPv6 si** son `.env.vpnN` porte une adresse IPv6 dans `WIREGUARD_ADDRESSES`
+  (`10.2.0.2/32,2a07:b944::2:2/128` pour Proton) **et** que le serveur choisi la route : ⚠️ certains serveurs Proton
+  n'en ont pas, et Gluetun en tire un au hasard dans `SERVER_CITIES` à chaque démarrage. Sans IPv6 de bout en
+  bout, la sonde échoue et l'IPv6 reste `unreachable` pour ce VPN.
+- **Bascule indépendante par famille** : `VPN_IPS6` liste, dans le même ordre que `VPN_IPS`, l'adresse IPv6 de
+  chaque Gluetun (les premiers seulement si les derniers n'en ont pas). Chaque famille a ses sondes
+  (`PROBE_URLS6`), son compteur `FAIL_THRESHOLD` / `RISE_THRESHOLD` et son fichier d'état :
+  `/run/gateway/active` (IPv4) et `/run/gateway/active6`. Un VPN dont l'IPv6 tombe garde l'IPv4.
+- **Découverte de voisins** : `post-rules-N.txt` ouvre `neighbour-solicitation` et `neighbour-advertisement` sur
+  `eth+`, sinon le pare-feu IPv6 de Gluetun ignore la sollicitation multicast et le gateway ne résout jamais
+  l'adresse du Gluetun à froid.
+- **Pas d'`ALLOW_IN` / `ALLOW_OUT` IPv6** : aucune entrée ni appel LAN en IPv6 n'est prévu.
 
 ### 4.6 Couches fail-closed, de l'app vers Internet
 
 1. L'app n'a pas `NET_ADMIN` : elle ne peut modifier ni routes ni firewall.
 2. Route par défaut du gateway : un Gluetun ou `unreachable`.
-3. nftables du gateway : sortie Internet seulement via un next-hop Gluetun ; DNS seulement vers les
-   Gluetun ; IPv6 bloqué.
-4. `vpn-gateway` est `internal` : même une route vers `172.30.20.1` ne mènerait nulle part.
+3. nftables du gateway : sortie Internet seulement via un next-hop Gluetun, en IPv4 comme en IPv6 ; DNS
+   seulement vers les Gluetun.
+4. `vpn-gateway` est `internal` : même une route vers `172.30.20.1` (ou `fd30:20::1`) ne mènerait nulle part.
 5. Gluetun : forward seulement vers `tun0`, politique DROP sinon.
 
 ### 4.7 Entrée par tunnels WireGuard
@@ -440,8 +457,8 @@ docker run --rm --cap-add NET_ADMIN -e ALLOW_IN="172.30.20.10:4041" -e ALLOW_OUT
   --entrypoint sh gluetun-egress-check -c '
     set_elements() { [ -n "$1" ] || return 0; printf "elements = { %s }" "$(echo $1 | sed "s/ /, /g; s/:/ . /g")"; }
     sed -e "s|# @ALLOW_IN@|$(set_elements "$ALLOW_IN")|" -e "s|# @ALLOW_OUT@|$(set_elements "$ALLOW_OUT")|" \
-      /etc/gateway/rules.nft > /run/rules.nft
-    nft -c -D LAN=172.30.20.0/24 -D INGRESS=172.30.20.10 -D APP_PORT=8080 \
+      -e "s|# @NEXTHOPS6@|elements = { fd30:20::11, fd30:20::12 }|" /etc/gateway/rules.nft > /run/rules.nft
+    nft -c -D LAN=172.30.20.0/24 -D LAN6=fd30:20::/64 -D INGRESS=172.30.20.10 -D APP_PORT=8080 \
       -D NEXTHOPS="{ 172.30.20.11, 172.30.20.12 }" -f /run/rules.nft && echo ok'
 ```
 
@@ -627,7 +644,7 @@ le premier à saturer. Ajouter des tunnels n'ajoute de la capacité qu'avec `lb_
 - **Pas de `conntrack`** : le gateway ne fait pas de NAT, rien à purger lors d'une bascule.
 - **Pas de `healthcheck.sh`** : le healthcheck Docker du gateway est une seule commande
   (`nft list table inet vpngw`).
-- **Profil `custom`** : endpoint figé en IP (exigence de Gluetun), pas d'IPv6.
+- **Profil `custom`** : endpoint figé en IP (exigence de Gluetun), pas d'IPv6 : il n'a donc pas d'entrée dans `VPN_IPS6`.
 - **Failover de 40 s environ** : compromis entre réactivité et stabilité, réglable (§6).
 
 ---

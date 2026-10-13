@@ -1,6 +1,8 @@
 # Firewall du namespace gateway (= namespace de l'application).
-# Chargé par entrypoint.sh avec : nft -D LAN=... -D INGRESS=... -D APP_PORT=... -D NEXTHOPS='{ ip1, ip2, ... }'
-# Les deux lignes `@ALLOW_IN@` et `@ALLOW_OUT@` sont remplacées par l'entrypoint (ALLOW_IN, ALLOW_OUT).
+# Chargé par entrypoint.sh avec : nft -D LAN=... -D LAN6=... -D INGRESS=... -D APP_PORT=... -D NEXTHOPS='{ ip1, ip2, ... }'
+# Les lignes `@ALLOW_IN@`, `@ALLOW_OUT@` et `@NEXTHOPS6@` sont remplacées par l'entrypoint (ALLOW_IN, ALLOW_OUT, VPN_IPS6).
+# IPv6 : mêmes invariants qu'en IPv4 (sortie seulement par un next-hop Gluetun) ; sans VPN_IPS6, @nexthops6 est vide
+# et toute sortie IPv6 est donc refusée.
 # Le trafic de l'app est du trafic LOCAL (OUTPUT) de ce namespace, pas du FORWARD.
 # Seule la table "inet vpngw" est gérée : les règles NAT du DNS embarqué Docker (127.0.0.11) ne sont pas touchées.
 
@@ -11,6 +13,11 @@ table inet vpngw {
 	set nexthops {
 		type ipv4_addr
 		elements = $NEXTHOPS
+	}
+
+	set nexthops6 {
+		type ipv6_addr
+		# @NEXTHOPS6@
 	}
 
 	# Ouvertures supplémentaires, en couples adresse . port (voir ALLOW_IN et ALLOW_OUT).
@@ -29,7 +36,8 @@ table inet vpngw {
 		iif "lo" accept
 		ct state invalid drop
 		ct state established,related accept
-		meta nfproto ipv6 drop
+		# Découverte de voisins : sans elle, aucun paquet IPv6 ne quitte le segment ; rien d'autre n'entre en IPv6.
+		icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert } accept
 		# Le reverse proxy d'entrée ouvre vers l'application ; ALLOW_IN ajoute d'autres couples source . port.
 		iifname "eth0" ip saddr $INGRESS tcp dport $APP_PORT ct state new accept
 		iifname "eth0" ip saddr . tcp dport @allow_in ct state new accept
@@ -46,28 +54,32 @@ table inet vpngw {
 		ip daddr 127.0.0.11 drop
 		oif "lo" accept
 
-		meta nfproto ipv6 drop
 		ct state invalid drop
 		ct state established,related accept
+		icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert } accept
 
 		# tout ce qui n'est pas eth0 est interdit
 		oifname != "eth0" drop
 
 		# DNS : uniquement vers les serveurs DNS internes des Gluetun (résolution DoT dans le tunnel)
 		ip daddr @nexthops meta l4proto { tcp, udp } th dport 53 accept
+		ip6 daddr @nexthops6 meta l4proto { tcp, udp } th dport 53 accept
 		meta l4proto { tcp, udp } th dport { 53, 853 } drop
 
 		# sonde de joignabilité L3 des Gluetun
 		ip daddr @nexthops icmp type echo-request accept
+		ip6 daddr @nexthops6 icmpv6 type echo-request accept
 
 		# Services du LAN que l'application a le droit d'appeler (ALLOW_OUT).
 		ip daddr . tcp dport @allow_out accept
 
 		# aucune autre connexion vers le LAN Docker (bridge/host 172.30.20.1, proxy d'entrée, Gluetun)
 		ip daddr $LAN drop
+		ip6 daddr $LAN6 drop
 
 		# Internet : uniquement si le next-hop résolu par le routage est un Gluetun.
 		# Toute autre route (ex. ajoutée via le bridge Docker) est bloquée ici.
 		rt ip nexthop @nexthops accept
+		rt ip6 nexthop @nexthops6 accept
 	}
 }

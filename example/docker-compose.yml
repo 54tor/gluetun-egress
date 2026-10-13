@@ -13,6 +13,8 @@ x-gluetun: &gluetun
   devices: [/dev/net/tun:/dev/net/tun]
   sysctls:
     net.ipv4.ip_forward: "1"          # forwarding gateway -> tun0 (policy FORWARD reste DROP)
+    net.ipv6.conf.all.disable_ipv6: "0"
+    net.ipv6.conf.all.forwarding: "1" # idem en IPv6 ; sans effet pour un VPN sans adresse IPv6 (WIREGUARD_ADDRESSES)
     # Les connecteurs wgentry partagent cette pile et ouvrent leurs connexions vers le proxy d'entrée depuis ici :
     # la plage par défaut (32768-60999) plafonne à ≈ 28 000 connexions simultanées par tunnel.
     net.ipv4.ip_local_port_range: "1024 65535"
@@ -36,12 +38,12 @@ services:
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
-      FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24
+      FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24,fd30:20::/64
     volumes:
       - ../gluetun/post-rules-1.txt:/iptables/post-rules.txt:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.11 }
-      vpn-gateway: { ipv4_address: 172.30.20.11 }
+      vpn-gateway: { ipv4_address: 172.30.20.11, ipv6_address: "fd30:20::11" }
 
   gluetun2:
     <<: *gluetun
@@ -50,12 +52,12 @@ services:
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
-      FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24
+      FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24,fd30:20::/64
     volumes:
       - ../gluetun/post-rules-2.txt:/iptables/post-rules.txt:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.12 }
-      vpn-gateway: { ipv4_address: 172.30.20.12 }
+      vpn-gateway: { ipv4_address: 172.30.20.12, ipv6_address: "fd30:20::12" }
 
   gluetun3:
     <<: *gluetun
@@ -124,8 +126,6 @@ services:
       # rejetterait alors les réponses des sondes (routées par uid vers les tables 101/102).
       # Valeur effective = max(all, eth0) : all ici, eth0 via driver_opts du réseau (voir plus bas).
       net.ipv4.conf.all.rp_filter: "0"
-      net.ipv6.conf.all.disable_ipv6: "1"
-      net.ipv6.conf.default.disable_ipv6: "1"
     environment:
       APP_PORT: ${APP_PORT}
       # Couples « ip:port » en plus de Traefik -> APP_PORT. Vides ici : l'application d'exemple n'en a pas besoin.
@@ -134,6 +134,10 @@ services:
       LAN_SUBNET: 172.30.20.0/24
       INGRESS_IP: 172.30.20.10
       VPN_IPS: 172.30.20.11 172.30.20.12 172.30.20.13   # ordre = priorité (nord, proton, custom)
+      # IPv6 : l'adresse de chaque Gluetun qui en a une, dans le même ordre (ici les deux premiers ; custom n'en a pas).
+      VPN_IPS6: fd30:20::11 fd30:20::12
+      LAN_SUBNET6: fd30:20::/64
+      PROBE_URLS6: ${PROBE_URLS6}
       PROBE_URLS: ${PROBE_URLS}
       PROBE_INTERVAL: ${PROBE_INTERVAL}
       PROBE_TIMEOUT: ${PROBE_TIMEOUT}
@@ -147,6 +151,7 @@ services:
     networks:
       vpn-gateway:                                  # UNIQUE réseau -> seul eth0 visible par l'app
         ipv4_address: 172.30.20.2
+        ipv6_address: "fd30:20::2"
         driver_opts:
           com.docker.network.endpoint.sysctls: net.ipv4.conf.IFNAME.rp_filter=0
     restart: unless-stopped
@@ -167,5 +172,8 @@ networks:
   vpn-gateway:
     driver: bridge
     internal: true                       # aucune route vers l'Internet du host, isolation Docker côté host
+    enable_ipv6: true                    # ULA : la sortie IPv6 est traduite (NAT66) dans chaque Gluetun
     ipam:
-      config: [{ subnet: 172.30.20.0/24, gateway: 172.30.20.1 }]
+      config:
+        - { subnet: 172.30.20.0/24, gateway: 172.30.20.1 }
+        - { subnet: "fd30:20::/64", gateway: "fd30:20::1" }

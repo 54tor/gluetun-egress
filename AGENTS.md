@@ -15,7 +15,8 @@ Le gateway est une **frontière de sécurité**, pas un utilitaire. Trois invari
    par l'Internet de l'hôte est un bug de sécurité.
 2. **Pas de fuite DNS.** `127.0.0.11` (DNS embarqué de Docker) est interdit, les ports 53/853 ne vont qu'aux
    Gluetun, le reste est jeté.
-3. **Internet seulement via un Gluetun.** `rt ip nexthop @nexthops` : toute autre route est bloquée par nftables.
+3. **Internet seulement via un Gluetun.** `rt ip nexthop @nexthops` et `rt ip6 nexthop @nexthops6` : toute autre route
+   est bloquée par nftables, dans les deux familles. Une règle IPv4 sans sa jumelle IPv6 est une fuite silencieuse.
 
 `ALLOW_IN` et `ALLOW_OUT` sont les seuls assouplissements prévus, et ce sont des **couples `ip:port`**, jamais un
 sous-réseau ni un port seul. Toute demande plus large se refuse ou s'arbitre explicitement.
@@ -29,9 +30,9 @@ sous-réseau ni un port seul. Toute demande plus large se refuse ou s'arbitre ex
 | `example/` | Une pile complète qui tourne, et qui sert de test à la main |
 | `example/wgentry/`, `example/relay/` | Modèles des tunnels WireGuard d'entrée (wireproxy dans chaque Gluetun) et du relais public qui les reçoit |
 
-Le plan d'adressage (`172.30.10.0/24` frontend, `172.30.20.0/24` vpn-gateway) est écrit à **quatre endroits** :
-`example/docker-compose.yml`, `gateway/*`, `gluetun/post-rules-*.txt`, `example/traefik/`. Le changer, c'est
-changer les quatre.
+Le plan d'adressage (`172.30.10.0/24` frontend, `172.30.20.0/24` vpn-gateway, `fd30:20::/64` ULA du vpn-gateway)
+est écrit à **quatre endroits** : `example/docker-compose.yml`, `gateway/*`, `gluetun/post-rules-*.txt`,
+`example/traefik/`. Le changer, c'est changer les quatre.
 
 ## Avant de rendre un changement
 
