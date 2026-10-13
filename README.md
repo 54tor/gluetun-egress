@@ -445,8 +445,20 @@ cause rien : sans Gluetun, rien ne sort (`unreachable`, réseau `internal`).
 
 - **IPv6 n'est pas touchée parce que `frontend` n'a pas `enable_ipv6`** : le Gluetun n'a alors aucune route IPv6 hors de
   `tun0`. Ne jamais activer l'IPv6 sur un réseau non interne d'un Gluetun sans refaire cette mesure.
-- **Fermeture côté hôte, non éprouvée ici** : une règle `DOCKER-USER` qui jette tout paquet de `172.30.20.0/24` (et
-  `fd30:20::/64`) sortant par un autre bridge que `vpn-gateway`. Elle couvre la fenêtre sans toucher aux Gluetun.
+- **Fermeture côté hôte (éprouvée IPv4)** : une règle `DOCKER-USER` qui jette tout paquet issu du réseau `vpn-gateway`
+  sortant par un autre bridge. Essai du 2026-10-14 : 0 paquet sorti sur 8 essais (5 démarrages, 3 redémarrages), contre
+  5 à 50 paquets sans la règle dans les 2 essais témoins ; 40 paquets jetés au compteur ; les Gluetun ne sont pas
+  touchés, leur trafic légitime ne traverse jamais ce chemin. L'IPv6 (`ip6tables`, préfixe ULA) n'a pas été éprouvée,
+  faute de fuite v6 à fermer.
+
+  ```sh
+  iptables -I DOCKER-USER -s 172.30.0.0/16 ! -o vpngw+ -j DROP
+  ```
+
+  ⚠️ L'essai a porté sur la forme précise (`-s <sous-réseau du vpn-gateway> ! -o <son bridge>`), pas sur cette forme
+  générique (`vpngw+`, plage commune), à rejouer avant de l'adopter. Une seule règle suffit pour plusieurs piles si chaque réseau `vpn-gateway` tient dans la plage `172.30.0.0/16` (et
+  rien d'autre) et déclare `com.docker.network.bridge.name: vpngw-<pile>`. `DOCKER-USER` est vidée au redémarrage du
+  démon Docker : à poser par un service systemd ou la configuration nftables de l'hôte.
 
 ### 4.7 Entrée par tunnels WireGuard
 
