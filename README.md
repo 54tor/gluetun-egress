@@ -426,6 +426,28 @@ n'est posée et toute sortie IPv6 est refusée.
 4. `vpn-gateway` est `internal` : même une route vers `172.30.20.1` (ou `fd30:20::1`) ne mènerait nulle part.
 5. Gluetun : forward seulement vers `tun0`, politique DROP sinon.
 
+#### Limite connue : le démarrage d'un Gluetun
+
+Mesurée le 2026-10-14 (capture sur l'hôte, flot de 40 SYN/s sous l'UID de sonde, 14 essais) :
+
+| Événement sur un Gluetun | Paquets sortis par l'interface physique de l'hôte |
+|---|---|
+| démarrage à froid (×5) | 4 à 46 paquets IPv4, de 0,17 s à 0,31 s après `docker start` |
+| `docker restart` (×3) | 8 à 9 paquets IPv4, ≈ 0,1 s |
+| `docker stop` (×3), `docker kill` (×3) | aucun |
+| IPv6, tous événements | aucun |
+
+Le Gluetun a `ip_forward=1` dès la création du conteneur, mais ses règles `iptables` ne sont posées qu'une fraction de
+seconde plus tard : les paquets du gateway sortent alors par sa route par défaut côté réseau non interne (`frontend`),
+avec leur adresse source privée. Seules des **sondes** en sont victimes (le trafic de l'application n'est routé qu'après
+`RISE_THRESHOLD` sondes réussies consécutives, soit quelques secondes de Gluetun en fonctionnement). Le gateway ne
+cause rien : sans Gluetun, rien ne sort (`unreachable`, réseau `internal`).
+
+- **IPv6 n'est pas touchée parce que `frontend` n'a pas `enable_ipv6`** : le Gluetun n'a alors aucune route IPv6 hors de
+  `tun0`. Ne jamais activer l'IPv6 sur un réseau non interne d'un Gluetun sans refaire cette mesure.
+- **Fermeture côté hôte, non éprouvée ici** : une règle `DOCKER-USER` qui jette tout paquet de `172.30.20.0/24` (et
+  `fd30:20::/64`) sortant par un autre bridge que `vpn-gateway`. Elle couvre la fenêtre sans toucher aux Gluetun.
+
 ### 4.7 Entrée par tunnels WireGuard
 
 - Chaque `wgentryN` (wireproxy) partage le namespace de `gluetunN` : son UDP vers le relais sort **par le VPN N**.
