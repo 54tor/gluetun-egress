@@ -58,15 +58,19 @@ ip rule add priority 1999 uidrange $((UID_BASE + 1))-$((UID_BASE + N)) unreachab
 mkdir -p /run/gateway
 
 probe() { # $1=uid $2=ip gluetun $3=nom -> 0 si Internet joignable à travers CE tunnel
+	rc=0
 	for url in $PROBE_URLS; do
-		if su-exec "$1:$1" curl -fsS -o /dev/null --max-time "$PROBE_TIMEOUT" "$url" 2>/dev/null; then
-			return 0
-		fi
+		# Pas de `-f` : toute réponse HTTP (même 404) prouve que le tunnel porte du trafic.
+		rc=0
+		su-exec "$1:$1" curl -sS -o /dev/null --max-time "$PROBE_TIMEOUT" "$url" 2>/dev/null || rc=$?
+		[ "$rc" = 0 ] && return 0
 	done
-	if ping -c1 -W1 "$2" >/dev/null 2>&1; then
-		log "$3 ($2) joignable mais aucune sortie Internet via son tunnel"
-	else
+	if ! ping -c1 -W1 "$2" >/dev/null 2>&1; then
 		log "$3 ($2) injoignable (conteneur arrêté ou réseau vpn-gateway)"
+	elif [ "$rc" = 28 ]; then
+		log "$3 ($2) joignable mais tunnel trop lent (aucune réponse en ${PROBE_TIMEOUT}s)"
+	else
+		log "$3 ($2) joignable mais aucune sortie Internet via son tunnel"
 	fi
 	return 1
 }

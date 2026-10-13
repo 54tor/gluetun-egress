@@ -187,7 +187,7 @@ cp .env.example .env && chmod 600 .env
 |---|---|---|
 | `TZ` | `Europe/Paris` | Fuseau des Gluetun |
 | `APP_PORT` | `8080` | Port d'écoute de l'app (utilisé par Traefik et par le firewall du gateway) |
-| `PROBE_URLS` | `https://9.9.9.9/ https://8.8.8.8/` | Cibles des sondes, par IP (aucune dépendance DNS). Une seule réponse suffit |
+| `PROBE_URLS` | `https://9.9.9.9/ https://8.8.8.8/` | Cibles des sondes, par IP (aucune dépendance DNS). Une seule réponse suffit, quel que soit le code HTTP |
 | `PROBE_INTERVAL` | `5` | Secondes entre deux cycles de sondes |
 | `PROBE_TIMEOUT` | `4` | Timeout de chaque requête de sonde |
 | `FAIL_THRESHOLD` | `3` | Échecs consécutifs avant de déclarer un VPN mort |
@@ -312,7 +312,8 @@ Puis, en boucle toutes les `PROBE_INTERVAL` secondes :
   route active. Le succès prouve que le Gluetun est joignable, que son tunnel fonctionne et
   qu'Internet répond à travers lui (Gluetun ne forwarde que vers `tun0`).
 - En cas d'échec, un `ping` du Gluetun distingue dans les logs :
-  `joignable mais aucune sortie Internet via son tunnel` et `injoignable`.
+  `injoignable`, `joignable mais tunnel trop lent` (timeout `PROBE_TIMEOUT`) et
+  `joignable mais aucune sortie Internet via son tunnel`.
 - **Hystérésis** : un VPN passe *down* après `FAIL_THRESHOLD` échecs consécutifs et *up* après
   `RISE_THRESHOLD` succès consécutifs.
 - **Choix** : le premier VPN *up* dans l'ordre de `VPN_IPS` ; aucun → `unreachable`.
