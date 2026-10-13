@@ -410,6 +410,11 @@ n'est posée et toute sortie IPv6 est refusée.
 - **Découverte de voisins** : `post-rules-N.txt` ouvre `neighbour-solicitation` et `neighbour-advertisement` sur
   `eth+`, sinon le pare-feu IPv6 de Gluetun ignore la sollicitation multicast et le gateway ne résout jamais
   l'adresse du Gluetun à froid.
+- **Pas d'annonces de routeur (RA)** : `accept_ra=0` sur `eth0` du gateway (`driver_opts` du réseau). Un RA émis par
+  un autre conteneur du réseau ajouterait sinon une route par défaut que nftables bloquerait : pas de fuite, mais plus
+  de sortie IPv6, car `ip -6 route replace default` ne remplace pas une route de métrique plus basse.
+- **Gluetun refuse une adresse WireGuard IPv6 si aucun de ses réseaux Docker n'a `enable_ipv6`** (`interface address
+  is IPv6 but IPv6 is not supported`) : `vpn-gateway` suffit, `frontend` reste en IPv4.
 - **Pas d'`ALLOW_IN` / `ALLOW_OUT` IPv6** : aucune entrée ni appel LAN en IPv6 n'est prévu.
 
 ### 4.6 Couches fail-closed, de l'app vers Internet
