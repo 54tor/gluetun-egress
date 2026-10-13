@@ -1,0 +1,14 @@
+[Unit]
+Description=Règle DOCKER-USER de gluetun-egress (fuite au démarrage d'un Gluetun)
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/vpngw-firewall.sh up
+ExecStop=/usr/local/sbin/vpngw-firewall.sh down
+
+[Install]
+WantedBy=multi-user.target

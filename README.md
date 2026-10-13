@@ -132,6 +132,7 @@ L'exemple ci-dessus est un exemple : l'ordre Nord, Proton, custom n'a de sens qu
 | `gateway/entrypoint.sh` | Firewall, tables de sonde, DNS, boucle de santé et de failover |
 | `gateway/rules.nft` | Firewall nftables du namespace gateway/app (ensembles `allow_in` et `allow_out`) |
 | `gluetun/post-rules-N.txt` | Forwarding + NAT gateway → `tun0` dans le Gluetun N (priorité N) |
+| `host/vpngw-firewall.sh`, `.service`, `vpngw.conf.example` | Service hôte : règle `DOCKER-USER` contre la fuite au démarrage d'un Gluetun (§4.6) |
 | `example/docker-compose.yml` | Une pile complète d'exemple : 3 Gluetun, 3 `wgentry`, Traefik, gateway, application |
 | `example/.env.example` | Modèle de `.env` de l'exemple |
 | `example/traefik/dynamic/app.yml` | Routeur Traefik → `http://172.30.20.2:APP_PORT` |
@@ -461,6 +462,29 @@ cause rien : sans Gluetun, rien ne sort (`unreachable`, réseau `internal`).
   interne, puisque `br_netfilter` fait traverser `DOCKER-USER` au trafic d'un bridge vers lui-même (non mesuré). Une seule règle suffit pour plusieurs piles si chaque réseau `vpn-gateway` tient dans la plage `172.30.0.0/16` (et
   rien d'autre) et déclare `com.docker.network.bridge.name: vpngw-<pile>`. `DOCKER-USER` est vidée au redémarrage du
   démon Docker : à poser par un service systemd ou la configuration nftables de l'hôte.
+
+#### Service hôte : la règle `DOCKER-USER`
+
+`host/vpngw-firewall.sh` pose sur l'hôte la règle de fermeture ci-dessus, et `host/vpngw-firewall.service` la repose à chaque
+démarrage de Docker (`DOCKER-USER` est vidée avec le démon). Elle ne porte que sur le sous-réseau `vpn-gateway` : tout paquet
+de cette source qui sort par un autre pont que `vpngw-egress` est jeté. `frontend` et les autres réseaux de la plage ne sont pas
+touchés, ce qui la distingue de la forme `-s 172.30.0.0/16 ! -o vpngw+` mesurée plus haut, qui couperait aussi la sortie de
+Caddy. Le compose de l'exemple nomme le pont (`com.docker.network.bridge.name: vpngw-egress`).
+
+```sh
+sudo install -m 755 host/vpngw-firewall.sh /usr/local/sbin/vpngw-firewall.sh
+sudo install -d /etc/gluetun-egress
+sudo cp host/vpngw.conf.example /etc/gluetun-egress/vpngw.conf    # une ligne « sous-réseau pont » par pile
+sudo cp host/vpngw-firewall.service /etc/systemd/system/
+sudo systemctl enable --now vpngw-firewall
+sudo iptables -vnL DOCKER-USER                                    # la règle et son compteur
+```
+
+`vpngw-firewall.sh status` dit si chaque règle est posée, `down` les retire. Pour vérifier la fermeture : `docker restart` d'un
+Gluetun, puis relire le compteur de la règle (un compteur qui monte = des paquets qui auraient fui). Essai du 2026-11-19 sur une
+pile à deux Gluetun (démarrage à froid, puis trois `docker restart` de `gluetun1`) : 1 paquet jeté, pont `vpngw-egress` créé, sortie
+de l'application par le VPN 1 inchangée ; pas de témoin sans règle. IPv4 seulement, comme la mesure d'origine. Test sans droit
+root : `sh host/tests/firewall/run.sh`.
 
 ### 4.7 Entrée par tunnels WireGuard
 

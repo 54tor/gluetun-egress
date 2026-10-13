@@ -171,6 +171,8 @@ networks:
       config: [{ subnet: 172.30.10.0/24, gateway: 172.30.10.1 }]
   vpn-gateway:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: vpngw-egress
     internal: true                       # aucune route vers l'Internet du host, isolation Docker côté host
     enable_ipv6: true                    # ULA : la sortie IPv6 est traduite (NAT66) dans chaque Gluetun
     ipam:

@@ -1,0 +1,3 @@
+# Une ligne par pile : sous-réseau vpn-gateway, puis le nom de son pont Docker
+# (com.docker.network.bridge.name dans docker-compose.yml, 15 caractères au plus). Plusieurs piles sur l'hôte : une ligne chacune.
+172.30.20.0/24 vpngw-egress
