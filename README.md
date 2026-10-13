@@ -353,9 +353,10 @@ Comportement de Gluetun v3.41.3 (vérifié dans le code) :
 - Les sous-réseaux **directement attachés** (`frontend`, `vpn-gateway`) sont autorisés
   automatiquement en entrée et en sortie, avec une règle `ip rule … to <subnet> lookup main`
   (priorité 98) qui garantit que les réponses vers le gateway ne partent pas dans le tunnel.
-- **`FIREWALL_OUTBOUND_SUBNETS` n'est pas utilisé** : il sert aux sous-réseaux joints *via la
-  passerelle par défaut* (il ajoute une route via cette passerelle, table 199) ; inutile pour des
-  réseaux déjà attachés.
+- **`FIREWALL_OUTBOUND_SUBNETS`** : positionné sur `frontend` et `vpn-gateway`, il garantit que
+  `wgentryN` joint le proxy d'entrée et que le gateway reste joignable depuis la pile du VPN. Gluetun
+  autorise déjà les réseaux attachés ; la variable ajoute une route via la passerelle par défaut (table 199) et
+  rend ce besoin explicite. ⚠️ à confirmer : retirer la variable et rejouer §6 dira si elle est strictement requise.
 - **`FIREWALL_INPUT_PORTS` ne gère que l'`INPUT`**, jamais le forwarding.
 - `post-rules.txt` : une commande par ligne, seules les lignes commençant par `iptables`,
   `iptables-nft`, `iptables-legacy`, `ip6tables…` sont exécutées, après les règles de Gluetun.
