@@ -1,7 +1,7 @@
 # AGENTS.md — consignes pour les agents (Claude Code, Codex, …)
 
 Dépôt de **gluetun-egress** : le gateway de sortie fail-closed d'une application derrière un VPN en failover,
-et la pile d'exemple (Gluetun ×3, `wgentry` ×3, Traefik) qui l'accompagne. Lis `README.md` en entier avant
+et la pile d'exemple (Gluetun ×3, `wgentry` ×3, Caddy) qui l'accompagne. Lis `README.md` en entier avant
 de toucher au pare-feu ou aux routes.
 
 ---
@@ -32,7 +32,7 @@ sous-réseau ni un port seul. Toute demande plus large se refuse ou s'arbitre ex
 
 Le plan d'adressage (`172.30.10.0/24` frontend, `172.30.20.0/24` vpn-gateway, `fd30:20::/64` ULA du vpn-gateway)
 est écrit à **quatre endroits** : `example/docker-compose.yml`, `gateway/*`, `gluetun/post-rules-*.txt`,
-`example/traefik/`. Le changer, c'est changer les quatre.
+`example/caddy/`. Le changer, c'est changer les quatre.
 
 ## Avant de rendre un changement
 

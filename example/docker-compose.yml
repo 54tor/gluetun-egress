@@ -1,9 +1,9 @@
 # Versions supposées : Docker Engine >= 28 (testé 29.8.1), Docker Compose >= 2.24 (testé 5.5.1),
 # Testé avec Gluetun v3.41.3 ; les images ne sont pas épinglées.
 #
-# Plan d'adressage (doit rester cohérent avec .env, gateway/*, gluetun*/iptables/*, traefik/*) :
-#   frontend    172.30.10.0/24  traefik .10 | gluetun1 .11 | gluetun2 .12 | gluetun3 .13
-#   vpn-gateway 172.30.20.0/24  gateway .2  | traefik  .10 | gluetun1 .11 | gluetun2 .12 | gluetun3 .13  (internal)
+# Plan d'adressage (doit rester cohérent avec .env, gateway/*, gluetun*/iptables/*, caddy/*) :
+#   frontend    172.30.10.0/24  caddy .10   | gluetun1 .11 | gluetun2 .12 | gluetun3 .13
+#   vpn-gateway 172.30.20.0/24  gateway .2  | caddy   .10 | gluetun1 .11 | gluetun2 .12 | gluetun3 .13  (internal)
 
 name: vpnstack
 
@@ -96,24 +96,20 @@ services:
     depends_on:
       gluetun3: { condition: service_healthy, restart: true }
 
-  traefik:
-    image: traefik:latest
-    command:
-      - --entrypoints.web.address=:80
-      - --entrypoints.web.forwardedHeaders.trustedIPs=172.30.10.11,172.30.10.12,172.30.10.13
-      - --providers.file.directory=/etc/traefik/dynamic
-      - --providers.file.watch=true
-      - --ping=true
-      - --log.level=INFO
-    environment:
-      APP_PORT: ${APP_PORT}             # lu par traefik/dynamic/app.yml (templating Go)
+  caddy:
+    image: caddy:alpine
     volumes:
-      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro   # lu avec APP_PORT (placeholder {$APP_PORT})
+    environment:
+      APP_PORT: ${APP_PORT}
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
     healthcheck:
-      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 10s
     networks:
-      frontend:    { ipv4_address: 172.30.10.10 }   # entrée depuis wgentry ; route par défaut de Traefik
+      frontend:    { ipv4_address: 172.30.10.10 }   # entrée depuis wgentry ; route par défaut de Caddy
       vpn-gateway: { ipv4_address: 172.30.20.10 }   # accès direct L2 à l'application (172.30.20.2)
     restart: unless-stopped
 
@@ -128,7 +124,7 @@ services:
       net.ipv4.conf.all.rp_filter: "0"
     environment:
       APP_PORT: ${APP_PORT}
-      # Couples « ip:port » en plus de Traefik -> APP_PORT. Vides ici : l'application d'exemple n'en a pas besoin.
+      # Couples « ip:port » en plus de Caddy -> APP_PORT. Vides ici : l'application d'exemple n'en a pas besoin.
       ALLOW_IN: ""          # ex. "172.30.20.11:4041" : un second client du LAN qui appelle l'application
       ALLOW_OUT: ""         # ex. "172.30.20.20:6379" : un service du LAN que l'application appelle
       LAN_SUBNET: 172.30.20.0/24

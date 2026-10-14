@@ -4,9 +4,9 @@
 
 L'application ne voit qu'une interface (`eth0`), ne sait rien des VPN, et **ne peut jamais sortir
 par l'Internet du host** : tout son trafic sortant passe par un gateway qui l'envoie dans le premier
-VPN réellement fonctionnel, ou nulle part. L'entrée, elle, passe par un reverse proxy (Traefik, Caddy…) :
+VPN réellement fonctionnel, ou nulle part. L'entrée, elle, passe par un reverse proxy (Caddy, Traefik…).
 Dans l'exemple fourni, chaque VPN porte un tunnel WireGuard sortant (`wgentryN`, un wireproxy dans
-la pile du Gluetun N) vers un relais public, puis Traefik.
+la pile du Gluetun N) vers un relais public, puis Caddy.
 
 ## Paramétrage en bref
 
@@ -59,9 +59,9 @@ gateway:
 │ .10.11  │  .20.11 │ │ .10.12  │  .20.12 │ │ .10.13  │  .20.13 │
 └────┬────────▲─────┘ └────┬────────▲─────┘ └────┬────────▲─────┘
      │        │            │        │            │        │
- frontend 172.30.10.0/24 ──┴────────┼────────────┴────────┼──── Traefik .10.10
+ frontend 172.30.10.0/24 ──┴────────┼────────────┴────────┼──── Caddy .10.10
                                     │                     │
- vpn-gateway 172.30.20.0/24 (internal) ─────────┬─────────┴──── Traefik .20.10
+ vpn-gateway 172.30.20.0/24 (internal) ─────────┬─────────┴──── Caddy .20.10
                                                 │
                            ┌─ netns gateway ────┴───────────────────────┐
                            │ eth0 172.30.20.2      (seule interface)    │
@@ -76,14 +76,14 @@ gateway:
 
 | Flux | Chemin |
 |---|---|
-| Entrant | relais → tunnel WireGuard → `wgentryN` (dans le netns de `gluetunN`) → `172.30.10.10:80` (Traefik) → `172.30.20.2:APP_PORT` (app) |
+| Entrant | relais → tunnel WireGuard → `wgentryN` (dans le netns de `gluetunN`) → `172.30.10.10:80` (Caddy) → `172.30.20.2:APP_PORT` (app) |
 | Sortant de l'app | app → route par défaut du gateway → `gluetunN` (FORWARD vers `tun0` + MASQUERADE) → VPN N → Internet |
-| Sortant de Traefik | réseau `frontend` → Internet du host (Traefik n'a pas besoin des VPN) |
+| Sortant de Caddy | réseau `frontend` → Internet du host (Caddy n'a pas besoin des VPN) |
 | Sortant de wgentry | `tun0` de son Gluetun → VPN N → relais (UDP) |
 
 ### Plan d'adressage
 
-| Réseau | Sous-réseau | gateway | traefik | gluetun1 | gluetun2 | gluetun3 |
+| Réseau | Sous-réseau | gateway | caddy | gluetun1 | gluetun2 | gluetun3 |
 |---|---|---|---|---|---|---|
 | `frontend` | 172.30.10.0/24 | — | .10 | .11 | .12 | .13 |
 | `vpn-gateway` (`internal: true`) | 172.30.20.0/24 | .2 | .10 | .11 | .12 | .13 |
@@ -117,7 +117,7 @@ L'exemple ci-dessus est un exemple : l'ordre Nord, Proton, custom n'a de sens qu
   `networks:`, `ports:` et `dns:` sont interdits sur l'app.
 - Chaque réseau Docker du gateway ajouterait une interface visible par l'app. Pour que l'app ne voie
   que `eth0`, **le gateway n'est que sur `vpn-gateway`**. Conséquence : l'app n'est pas joignable sur
-  `frontend` ; **Traefik rejoint donc aussi `vpn-gateway`** et joint l'app en direct (L2) sur
+  `frontend` ; **Caddy rejoint donc aussi `vpn-gateway`** et joint l'app en direct (L2) sur
   `172.30.20.2`, sans jamais passer par un Gluetun.
 - Le trafic de l'app est du **trafic local** (chaîne `output`) pour le gateway, pas du `forward`.
   `ip_forward` y est donc inutile et vaut 0. Le forwarding a lieu dans les Gluetun.
@@ -133,12 +133,12 @@ L'exemple ci-dessus est un exemple : l'ordre Nord, Proton, custom n'a de sens qu
 | `gateway/rules.nft` | Firewall nftables du namespace gateway/app (ensembles `allow_in` et `allow_out`) |
 | `gluetun/post-rules-N.txt` | Forwarding + NAT gateway → `tun0` dans le Gluetun N (priorité N) |
 | `host/vpngw-firewall.sh`, `.service`, `vpngw.conf.example` | Service hôte : règle `DOCKER-USER` contre la fuite au démarrage d'un Gluetun (§4.6) |
-| `example/docker-compose.yml` | Une pile complète d'exemple : 3 Gluetun, 3 `wgentry`, Traefik, gateway, application |
+| `example/docker-compose.yml` | Une pile complète d'exemple : 3 Gluetun, 3 `wgentry`, Caddy, gateway, application |
 | `example/.env.example` | Modèle de `.env` de l'exemple |
-| `example/traefik/dynamic/app.yml` | Routeur Traefik → `http://172.30.20.2:APP_PORT` |
+| `example/caddy/Caddyfile` | Site `:80` Caddy → `http://172.30.20.2:APP_PORT`, confiance aux Gluetun (`X-Forwarded-For`) |
 | `.env`, `.env.vpn1`, `.env.vpn2`, `.env.vpn3`, `wgentry/wgN.conf` | Valeurs réelles, **secrets**, droits 600 — jamais versionnés |
 
-Les chemins de ce document qui commencent par `docker-compose.yml`, `.env*` ou `traefik/` sont ceux de `example/`.
+Les chemins de ce document qui commencent par `docker-compose.yml`, `.env*` ou `caddy/` sont ceux de `example/`.
 
 ### Brancher ce gateway sur une autre application
 
@@ -170,7 +170,7 @@ ou le même port d'un autre hôte, reste fermé.
 
 Versions supposées et testées : Docker Engine 29.8.1 (≥ 28 requis pour
 `com.docker.network.endpoint.sysctls`), Docker Compose 5.5.1 (≥ 2.24 pour `depends_on.restart`),
-Gluetun **v3.41.3**, wgentry 2026.9.3, Traefik v3.7.13, Alpine 3.24. Le comportement de Gluetun
+Gluetun **v3.41.3**, wgentry 2026.9.3, Caddy 2.9.1, Alpine 3.24. Le comportement de Gluetun
 décrit ici a été vérifié dans son code source v3.41.3 ; revérifier `post-rules.txt` en cas de montée
 de version majeure.
 
@@ -187,7 +187,7 @@ cp .env.example .env && chmod 600 .env
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `TZ` | `Europe/Paris` | Fuseau des Gluetun |
-| `APP_PORT` | `8080` | Port d'écoute de l'app (utilisé par Traefik et par le firewall du gateway) |
+| `APP_PORT` | `8080` | Port d'écoute de l'app (utilisé par Caddy et par le firewall du gateway) |
 | `PROBE_URLS` | `https://9.9.9.9/ https://8.8.8.8/` | Cibles des sondes, par IP (aucune dépendance DNS). Une seule réponse suffit, quel que soit le code HTTP |
 | `PROBE_INTERVAL` | `5` | Secondes entre deux cycles de sondes |
 | `PROBE_TIMEOUT` | `4` | Timeout de chaque requête de sonde |
@@ -552,7 +552,7 @@ A() { docker run --rm --network container:vpnstack-app-1 alpine:latest "$@"; }
 | 7-8 | IP publique de chaque VPN | `docker exec vpnstack-gluetun1-1 wget -qO- https://api.ipify.org` (idem 2, 3) | une IP par fournisseur |
 | 9 | IP publique vue par l'app | `A wget -qO- https://api.ipify.org` | = IP de gluetun1 |
 | 10 | DNS de l'app | `A cat /etc/resolv.conf; A nslookup example.com` | serveur `172.30.20.11` (ou .12/.13) |
-| 14 | Traefik → app | `docker exec vpnstack-traefik-1 wget -qO- http://127.0.0.1/` | réponse de l'app, `RemoteAddr: 172.30.20.10:…` |
+| 14 | Caddy → app | `docker exec vpnstack-caddy-1 wget -qO- http://127.0.0.1/` | réponse de l'app, `RemoteAddr: 172.30.20.10:…` |
 | 15 | Relais → Caddy | sur le relais : `wg show wg0 latest-handshakes`, puis `curl -sI https://<hostname>` | poignée de main récente par pair, HTTP 200 |
 | 16-17 | Sortie de chaque Gluetun d'entrée | `docker run --rm --network container:vpnstack-wgentry1-1 alpine:latest wget -qO- https://api.ipify.org` (idem 2, 3) | = IP du VPN correspondant |
 | — | Quel tunnel sert le trafic | sur le relais : `wg show wg0 transfer` | le compteur qui monte |
@@ -637,7 +637,7 @@ reconnexion puis revient.
 2. `gluetun4/iptables/post-rules.txt` : copie de `gluetun3` avec `172.30.20.13` → `172.30.20.14`.
 3. Dans `docker-compose.yml` : services `gluetun4` (`.10.14` / `.20.14`) et `wgentry4` sur le
    modèle de `gluetun3`/`wgentry3` ; ajouter `172.30.10.14` à
-   `forwardedHeaders.trustedIPs` de Traefik ; ajouter `172.30.20.14` à `VPN_IPS` du gateway
+   `trusted_proxies` du `Caddyfile` ; ajouter `172.30.20.14` à `VPN_IPS` du gateway
    (l'ordre = la priorité).
 4. `example/wgentry/wg4.conf` (copie de `wg3.conf.example`, adresse `10.99.4.2/32`) et un `[Peer]` de plus dans `wg0.conf` du relais, avec son upstream `10.99.4.2:80` dans le `Caddyfile` du relais.
 5. `docker compose up -d --build`.
@@ -700,7 +700,7 @@ le premier à saturer. Ajouter des tunnels n'ajoute de la capacité qu'avec `lb_
 ## 10. Choix techniques et limites
 
 - **Pas de proxy applicatif** (HTTP, SOCKS, Shadowsocks) : le routage est transparent au niveau IP.
-- **Traefik n'est pas derrière les VPN** et ne sert jamais au failover sortant.
+- **Caddy n'est pas derrière les VPN** et ne sert jamais au failover sortant.
 - **Sondes par UID + `ip rule uidrange`** plutôt que par marque de paquet : aucune règle nftables de
   marquage, chaque VPN est testé indépendamment de la route active. Les UID 64101-641NN ne doivent
   pas être utilisés par l'application (le noyau voit les UID réels).
