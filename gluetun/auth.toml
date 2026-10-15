@@ -1,0 +1,7 @@
+# Rôle du serveur de contrôle de Gluetun pour vpn-check.sh : changer de serveur, rien d'autre.
+# ⚠️ Sans authentification : le serveur doit écouter sur 127.0.0.1 seulement
+# (HTTP_CONTROL_SERVER_ADDRESS), donc n'être joignable que depuis la pile du Gluetun.
+[[roles]]
+name = "vpn-check"
+routes = ["PUT /v1/vpn/status"]
+auth = "none"

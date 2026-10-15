@@ -20,6 +20,14 @@ x-gluetun: &gluetun
     net.ipv4.ip_local_port_range: "1024 65535"
   dns:
     - 9.9.9.9
+  # Un serveur lent ou muet est recalé et remplacé avant que la pile démarre (gluetun-egress, vpn-check.sh).
+  healthcheck:
+    test: ["CMD", "/vpn-check.sh"]
+    interval: 30s
+    timeout: 60s
+    retries: 3
+    start_period: 4m
+    start_interval: 10s
   restart: unless-stopped
 
 x-wgentry: &wgentry
@@ -35,12 +43,15 @@ services:
     <<: *gluetun
     env_file: [.env.vpn1]             # VPN_SERVICE_PROVIDER, VPN_TYPE, clés/identifiants du fournisseur 1
     environment:
+      HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24,fd30:20::/64
     volumes:
       - ../gluetun/post-rules-1.txt:/iptables/post-rules.txt:ro
+      - ../gluetun/vpn-check.sh:/vpn-check.sh:ro
+      - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.11 }
       vpn-gateway: { ipv4_address: 172.30.20.11, ipv6_address: "fd30:20::11" }
@@ -49,12 +60,15 @@ services:
     <<: *gluetun
     env_file: [.env.vpn2]             # VPN_SERVICE_PROVIDER, VPN_TYPE, clés/identifiants du fournisseur 2
     environment:
+      HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24,fd30:20::/64
     volumes:
       - ../gluetun/post-rules-2.txt:/iptables/post-rules.txt:ro
+      - ../gluetun/vpn-check.sh:/vpn-check.sh:ro
+      - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.12 }
       vpn-gateway: { ipv4_address: 172.30.20.12, ipv6_address: "fd30:20::12" }
@@ -63,12 +77,15 @@ services:
     <<: *gluetun
     env_file: [.env.vpn3]             # VPN_SERVICE_PROVIDER, VPN_TYPE, clés/identifiants du fournisseur 3
     environment:
+      HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24
     volumes:
       - ../gluetun/post-rules-3.txt:/iptables/post-rules.txt:ro
+      - ../gluetun/vpn-check.sh:/vpn-check.sh:ro
+      - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.13 }
       vpn-gateway: { ipv4_address: 172.30.20.13 }

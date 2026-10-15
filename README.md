@@ -511,6 +511,31 @@ root : `sh host/tests/firewall/run.sh`.
 
 ---
 
+### 4.8 Qualité du serveur VPN (`gluetun/vpn-check.sh`)
+
+Gluetun tire un serveur au hasard dans son filtre (`SERVER_CITIES`…) ; sa sonde native ne dit que « une
+connexion sort ». `vpn-check.sh` remplace la sonde Docker de chaque Gluetun : il appelle la sonde native, puis,
+**une fois par IP publique**, mesure la latence (`https://9.9.9.9/`), joint chaque `VPN_CHECK_URLS`
+et télécharge `VPN_CHECK_SPEED_URL` (`VPN_CHECK_BYTES` en est la taille). Un serveur recalé est remplacé par
+`PUT /v1/vpn/status` (`stopped` puis `running` : Gluetun en retire un), au plus `VPN_CHECK_MAX_REROLLS` fois ;
+au-delà, le serveur est gardé et le conteneur reste *unhealthy*. Les verdicts sont dans `docker logs`
+(`[vpn-check]`).
+
+| Variable | Défaut |
+|---|---|
+| `VPN_CHECK_MIN_MBPS` | `20` |
+| `VPN_CHECK_MAX_LATENCY_MS` | `300` (requête HTTPS complète, poignée TLS comprise) |
+| `VPN_CHECK_URLS` | `https://www.google.com/generate_204 https://www.wikipedia.org/` |
+| `VPN_CHECK_SPEED_URL` | `https://proof.ovh.net/files/10Mb.dat` (fichier de taille fixe) |
+| `VPN_CHECK_BYTES` | `10485760` (taille exacte du fichier ci-dessus, base du calcul du débit) |
+| `VPN_CHECK_MAX_REROLLS` | `8` |
+
+Câblage dans chaque service Gluetun : monter `vpn-check.sh` sur `/vpn-check.sh` et `auth.toml` sur
+`/gluetun/auth/config.toml`, et poser `HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` — ⚠️ le rôle est sans
+authentification, le serveur de contrôle ne doit donc écouter que sur la boucle locale. `start_period: 4m` laisse
+le temps des remplacements : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé.
+⚠️ `SERVER_NAMES` réduit à un seul serveur rend le remplacement inopérant.
+
 ## 5. Validation
 
 **Le pare-feu seul, sans pile.** Contrôler la syntaxe de `rules.nft` avec des ensembles vides puis remplis
