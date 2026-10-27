@@ -150,10 +150,10 @@ while :; do
 		if [ "$want" != "$active" ]; then
 			eval "active$f=$want"
 			echo "$want" > "/run/gateway/active$([ "$f" = 6 ] && echo 6)"
+			[ "$f" = 4 ] && [ "$want" != none ] && set_dns "$want_ip"
 			log "sortie IPv$f active -> $want"
 		fi
 	done
 
 	sleep "$PROBE_INTERVAL" & wait $!
 done
-			[ "$f" = 4 ] && [ "$want" != none ] && set_dns "$want_ip"
