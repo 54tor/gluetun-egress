@@ -1,6 +1,6 @@
 iptables -P FORWARD DROP
 iptables -I INPUT -i eth+ -d 172.30.20.12/32 ! -s 172.30.20.2/32 -j DROP
-iptables -I OUTPUT -d 172.30.10.10/32 -p tcp --dport 80 -m owner ! --uid-owner 65532 -j DROP
+iptables -I OUTPUT -d 172.30.10.10/32 -p tcp -m owner ! --uid-owner 65532 -j DROP
 iptables -A FORWARD -i eth+ -s 172.30.20.2/32 -o tun0 -j ACCEPT
 iptables -A FORWARD -i tun0 -o eth+ -d 172.30.20.2/32 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -t nat -A POSTROUTING -s 172.30.20.2/32 -o tun0 -j MASQUERADE

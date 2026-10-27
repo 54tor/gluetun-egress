@@ -133,7 +133,7 @@ L'exemple ci-dessus est un exemple : l'ordre Nord, Proton, custom n'a de sens qu
 | `gateway/rules.nft` | Firewall nftables du namespace gateway/app (ensembles `allow_in` et `allow_out`) |
 | `gluetun/post-rules-N.txt` | Forwarding + NAT gateway → `tun0` dans le Gluetun N (priorité N) |
 | `host/vpngw-firewall.sh`, `.service`, `vpngw.conf.example` | Service hôte : règle `DOCKER-USER` contre la fuite au démarrage d'un Gluetun (§4.6) |
-| `example/docker-compose.yml` | Une pile complète d'exemple : 3 Gluetun, 3 `wgentry`, Caddy, gateway, application |
+| `example/docker-compose.yml` | Une pile complète d'exemple : 3 Gluetun, 3 `wgentry` (wireproxy, un tunnel WireGuard vers le relais par Gluetun), Caddy, gateway, application |
 | `example/.env.example` | Modèle de `.env` de l'exemple |
 | `example/caddy/Caddyfile` | Site `:80` Caddy → `http://172.30.20.2:APP_PORT`, confiance aux Gluetun (`X-Forwarded-For`) |
 | `.env`, `.env.vpn1`, `.env.vpn2`, `.env.vpn3`, `wgentry/wgN.conf` | Valeurs réelles, **secrets**, droits 600 — jamais versionnés |
@@ -370,6 +370,7 @@ Contenu (exemple gluetun1, `.11` ; `.12` et `.13` pour les autres) :
 |---|---|
 | `-P FORWARD DROP` | Réaffirme la politique |
 | `-I INPUT -i eth+ -d 172.30.20.11 ! -s 172.30.20.2 -j DROP` | Seul le gateway peut joindre ce Gluetun sur `vpn-gateway` |
+| `-I OUTPUT -d 172.30.10.10 -p tcp -m owner ! --uid-owner 65532 -j DROP` | Seul `wgentry` (uid 65532, `nonroot` de son image) joint le proxy d'entrée, **sur tous ses ports** |
 | `-A FORWARD -i eth+ -s 172.30.20.2 -o tun0 -j ACCEPT` | Forward gateway → tunnel **uniquement** |
 | `-A FORWARD -i tun0 -o eth+ -d 172.30.20.2 … ESTABLISHED,RELATED` | Retour |
 | `-t nat -A POSTROUTING -s 172.30.20.2 -o tun0 -j MASQUERADE` | NAT vers le tunnel |
@@ -377,6 +378,12 @@ Contenu (exemple gluetun1, `.11` ; `.12` et `.13` pour les autres) :
 
 Si le tunnel tombe, le noyau route le paquet forwardé vers `eth` au lieu de `tun0` : il ne matche
 plus la règle `-o tun0` et la politique DROP le jette. **Aucune fuite possible par un Gluetun.**
+
+Le proxy d'entrée fait confiance à l'adresse de chaque Gluetun (c'est par là qu'arrive `wgentryN`) et y croit
+les en-têtes d'adresse cliente (`X-Forwarded-For`). Tout processus logé dans la pile d'un Gluetun sort sous cette
+même adresse : seul l'uid les distingue. Sans cette règle, un tel processus poserait l'adresse de son choix. Elle
+couvre **tous les ports** du proxy : limitée au port 80, elle laissait ouverte toute entrée de plus (un canal
+d'administration, par exemple), que le proxy croit de la même façon.
 
 ### 4.4 DNS
 
