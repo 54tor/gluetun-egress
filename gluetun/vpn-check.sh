@@ -31,7 +31,8 @@ reject() {
 	tries=$(( $(cat $TRIES 2>/dev/null || echo 0) + 1 ))
 	echo $tries >$TRIES
 	if [ $tries -gt "$MAX_REROLLS" ]; then
-		log "recalé ($1), $MAX_REROLLS serveurs essayés : on garde celui-ci"
+		log "recalé ($1), $MAX_REROLLS serveurs essayés : on garde celui-ci, nouveau cycle au prochain contrôle"
+		rm -f $TRIES
 		exit 1
 	fi
 	log "recalé ($1), changement de serveur ($tries/$MAX_REROLLS)"

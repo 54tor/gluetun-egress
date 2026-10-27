@@ -528,7 +528,7 @@ connexion sort ». `vpn-check.sh` remplace la sonde Docker de chaque Gluetun : i
 **une fois par IP publique**, mesure la latence (`https://9.9.9.9/`), joint chaque `VPN_CHECK_URLS`
 et télécharge `VPN_CHECK_SPEED_URL` (`VPN_CHECK_BYTES` en est la taille). Un serveur recalé est remplacé par
 `PUT /v1/vpn/status` (`stopped` puis `running` : Gluetun en retire un), au plus `VPN_CHECK_MAX_REROLLS` fois ;
-au-delà, le serveur est gardé et le conteneur reste *unhealthy*. Les verdicts sont dans `docker logs`
+au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unhealthy*, puis un nouveau cycle de tirages repart. Les verdicts sont dans `docker logs`
 (`[vpn-check]`).
 
 | Variable | Défaut |
