@@ -69,9 +69,10 @@ done
 
 # 4. DNS de l'application : même fichier que /etc/resolv.conf de l'app (Docker le partage en
 #    network_mode container). Écriture en place (pas de rename) pour conserver le bind mount.
-#    musl interroge les serveurs en parallèle ; glibc séquentiellement (timeout court).
-#    musl et glibc n'utilisent que les 3 premiers nameserver.
-{ for ip in $VPN_IPS; do echo "nameserver $ip"; done; echo "options timeout:2 attempts:2"; } > /etc/resolv.conf
+#    Au départ, tous les Gluetun (aucun n'est encore validé) ; ensuite le seul VPN actif (set_dns), pour que les
+#    noms résolus n'aillent pas chez les fournisseurs inactifs. musl et glibc n'utilisent que les 3 premiers nameserver.
+set_dns() { { for n in "$@"; do echo "nameserver $n"; done; echo "options timeout:2 attempts:2"; } > /etc/resolv.conf; }
+set_dns $VPN_IPS
 
 mkdir -p /run/gateway
 
@@ -144,3 +145,4 @@ while :; do
 
 	sleep "$PROBE_INTERVAL" & wait $!
 done
+			[ "$f" = 4 ] && [ "$want" != none ] && set_dns "$want_ip"

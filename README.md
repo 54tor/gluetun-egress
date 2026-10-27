@@ -304,7 +304,7 @@ Au démarrage, dans cet ordre :
    perdu sa route : une sonde ne retombe jamais sur la table `main`, donc jamais sur un autre VPN
    (pas de faux positif).
 4. **DNS** : réécrit `/etc/resolv.conf` (partagé avec l'app) avec un `nameserver` par Gluetun et
-   `options timeout:2 attempts:2`.
+   `options timeout:2 attempts:2`, puis, à chaque bascule IPv4, avec le seul Gluetun actif.
 
 Puis, en boucle toutes les `PROBE_INTERVAL` secondes :
 
@@ -387,7 +387,9 @@ d'administration, par exemple), que le proxy croit de la même façon.
 
 ### 4.4 DNS
 
-- `/etc/resolv.conf` de l'app = celui du gateway : `nameserver 172.30.20.11`, `.12`, `.13`.
+- `/etc/resolv.conf` de l'app = celui du gateway : au démarrage `nameserver 172.30.20.11`, `.12`, `.13` ; dès
+  qu'un VPN est actif, le seul `nameserver` de ce VPN (les fournisseurs inactifs ne voient pas les noms résolus).
+  Sans VPN actif, le fichier garde son dernier contenu.
 - Chaque Gluetun sert du DNS sur `:53` (toutes interfaces) et résout en DNS-over-TLS **dans son
   tunnel**. Si son tunnel est coupé, il ne répond plus et le client passe au serveur suivant (musl
   interroge en parallèle, glibc séquentiellement avec timeout de 2 s).
