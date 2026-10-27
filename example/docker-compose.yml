@@ -173,6 +173,8 @@ services:
     image: traefik/whoami:latest          # remplacer par l'application réelle
     command: ["--port", "${APP_PORT}"]
     network_mode: "service:gateway"      # partage netns, /etc/resolv.conf et /etc/hosts du gateway
+    cap_drop: [ALL]                      # sans NET_RAW : pas de socket brut qui contourne nftables
+    security_opt: ["no-new-privileges:true"]
     depends_on:
       gateway: { condition: service_healthy, restart: true }
     restart: unless-stopped

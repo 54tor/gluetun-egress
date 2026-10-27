@@ -427,7 +427,8 @@ n'est posée et toute sortie IPv6 est refusée.
 
 ### 4.6 Couches fail-closed, de l'app vers Internet
 
-1. L'app n'a pas `NET_ADMIN` : elle ne peut modifier ni routes ni firewall.
+1. L'app n'a aucune capacité (`cap_drop: [ALL]`, comme les `wgentryN`) : ni `NET_ADMIN` (routes, firewall) ni
+   `NET_RAW` (socket brut qui contournerait nftables, usurpation ARP sur `vpn-gateway`).
 2. Route par défaut du gateway : un Gluetun ou `unreachable`.
 3. nftables du gateway : sortie Internet seulement via un next-hop Gluetun, en IPv4 comme en IPv6 ; DNS
    seulement vers les Gluetun.
