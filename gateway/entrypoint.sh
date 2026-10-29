@@ -27,7 +27,7 @@ check VPN_IPS6 "$VPN_IPS6" '0-9a-fA-F:'
 check LAN_SUBNET "$LAN_SUBNET" '0-9./'
 check LAN_SUBNET6 "$LAN_SUBNET6" '0-9a-fA-F:/'
 check INGRESS_IP "$INGRESS_IP" '0-9.'
-check APP_PORT "$APP_PORT" '0-9'
+check APP_PORT "$APP_PORT" '-0-9'
 
 # VPN n°i : sonde sous l'UID 64100+i, forcée (ip rule uidrange) dans la table 100+i -> SON Gluetun,
 # indépendamment de la route active. UID hors des plages usuelles pour ne pas collider avec
