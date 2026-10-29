@@ -1,3 +1,4 @@
 .env
 .env.vpn*
+*.log
 example/wgentry/*.conf
