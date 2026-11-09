@@ -48,7 +48,10 @@ services:
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24,fd30:20::/64
+      VPN_CHECK_NAME: vpn1              # nom du tunnel dans /run/gateway/up (rang dans VPN_IPS du gateway)
+      VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
     volumes:
+      - gateway-state:/gateway-state:ro
       - ../gluetun/post-rules-1.txt:/iptables/post-rules.txt:ro
       - ../gluetun/vpn-check.sh:/vpn-check.sh:ro
       - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
@@ -65,7 +68,10 @@ services:
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24,fd30:20::/64
+      VPN_CHECK_NAME: vpn2
+      VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
     volumes:
+      - gateway-state:/gateway-state:ro
       - ../gluetun/post-rules-2.txt:/iptables/post-rules.txt:ro
       - ../gluetun/vpn-check.sh:/vpn-check.sh:ro
       - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
@@ -82,7 +88,10 @@ services:
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24
+      VPN_CHECK_NAME: vpn3
+      VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
     volumes:
+      - gateway-state:/gateway-state:ro
       - ../gluetun/post-rules-3.txt:/iptables/post-rules.txt:ro
       - ../gluetun/vpn-check.sh:/vpn-check.sh:ro
       - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
@@ -186,6 +195,7 @@ services:
       RESTART_DEPENDENTS_3: vpnstack-wgentry3-1
     volumes:
       - docker-proxy:/var/run/docker-proxy:ro      # socket Docker filtré par socket-proxy : relance de conteneurs seulement
+      - gateway-state:/run/gateway                  # tunnels en vie (fichier « up »), lus par vpn-check.sh des Gluetun
     healthcheck:
       # "healthy" = firewall fail-closed chargé (PAS "un VPN est up") : l'app peut démarrer sans risque.
       test: ["CMD", "nft", "list", "table", "inet", "vpngw"]
@@ -210,6 +220,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  gateway-state:
   docker-proxy:
 
 networks:

@@ -140,6 +140,8 @@ for f in $FAMILIES; do
 	eval "active$f=none"
 	echo none > "/run/gateway/active$([ "$f" = 6 ] && echo 6)"
 done
+# /run/gateway/up : tous les VPN « up » en IPv4 (vpn1 vpn2…), lu par vpn-check.sh pour ne jamais recycler le dernier.
+: > /run/gateway/up
 
 trap 'log "arrêt"; exit 0' TERM INT
 
@@ -156,7 +158,7 @@ while :; do
 
 	for f in $FAMILIES; do
 		# failover : le premier VPN "up" dans l'ordre gagne ; balance-* : tous les VPN "up" ; par famille
-		want=none want_ips=
+		want=none want_ips= up_names=
 		i=0
 		for ip in $(ips_of $f); do
 			i=$((i + 1))
@@ -171,12 +173,14 @@ while :; do
 				restart_dependents "$i" &
 			fi
 			eval "ok${f}_$i=$ok ko${f}_$i=$ko up${f}_$i=$up down${f}_$i=$down"
+			[ "$up" = 1 ] && up_names="$up_names vpn$i"
 			if [ "$up" = 1 ] && { [ -z "$want_ips" ] || [ "$EGRESS_MODE" != failover ]; }; then
 				want_ips="$want_ips $ip"
 				if [ "$want" = none ]; then want=vpn$i; else want="$want,vpn$i"; fi
 			fi
 		done
 
+		[ "$f" = 4 ] && echo "$up_names" > /run/gateway/up
 		# idempotent, rejoué à chaque cycle (auto-réparation si la route a été modifiée)
 		if [ "$want" = none ]; then
 			ipf $f route replace unreachable default

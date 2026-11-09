@@ -563,12 +563,22 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_SPEED_URL` | `https://proof.ovh.net/files/10Mb.dat` (fichier de taille fixe) |
 | `VPN_CHECK_BYTES` | `10485760` (taille exacte du fichier ci-dessus, base du calcul du débit) |
 | `VPN_CHECK_MAX_REROLLS` | `8` |
+| `VPN_CHECK_RECHECK_SECONDS` | `0` (jamais : un serveur validé n'est pas retesté tant que l'IP ne change pas) |
+| `VPN_CHECK_NAME` | `vpn1`, `vpn2`… : le nom du tunnel côté gateway (rang dans `VPN_IPS`), requis pour le retest |
 
 Câblage dans chaque service Gluetun : monter `vpn-check.sh` sur `/vpn-check.sh` et `auth.toml` sur
 `/gluetun/auth/config.toml`, et poser `HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` — ⚠️ le rôle est sans
 authentification, le serveur de contrôle ne doit donc écouter que sur la boucle locale. `start_period: 4m` laisse
 le temps des remplacements : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé.
 ⚠️ `SERVER_NAMES` réduit à un seul serveur rend le remplacement inopérant.
+
+**Retest périodique.** Avec `VPN_CHECK_RECHECK_SECONDS` > 0, un serveur validé est retesté (latence, débit) quand sa
+validation a plus de N secondes ; un serveur devenu lent est remplacé comme à la connexion, et le gateway retire le
+tunnel de la route pendant le remplacement. **Garde-fou :** le gateway publie les tunnels en vie dans
+`/run/gateway/up` (volume `gateway-state`, monté en lecture seule dans chaque Gluetun). `vpn-check.sh` ne retest un
+tunnel que si un *autre* tunnel est en vie : le dernier est gardé, même lent, plutôt que de couper la sortie. Sans
+fichier lisible ou sans `VPN_CHECK_NAME`, pas de retest. Le coût est d'environ `VPN_CHECK_BYTES` par tunnel et par
+période. Gluetun n'a pas de liste d'exclusion : un serveur recalé n'est pas mémorisé et peut être retiré à nouveau.
 
 ## 5. Validation
 

@@ -1,5 +1,6 @@
 #!/bin/sh
-# Sonde de santé Docker d'un Gluetun : la sonde native, puis, une fois par serveur, latence, débit et
+# Sonde de santé Docker d'un Gluetun : la sonde native, puis, une fois par serveur (ou toutes les
+# VPN_CHECK_RECHECK_SECONDS si défini), latence, débit et
 # joignabilité à travers le tunnel. Un serveur recalé est remplacé (Gluetun en retire un au hasard dans
 # son filtre) jusqu'à VPN_CHECK_MAX_REROLLS fois ; au-delà, le conteneur reste unhealthy.
 #
@@ -11,16 +12,41 @@ MAX_REROLLS=${VPN_CHECK_MAX_REROLLS:-8}
 URLS=${VPN_CHECK_URLS:-https://www.google.com/generate_204 https://www.wikipedia.org/}
 BYTES=${VPN_CHECK_BYTES:-10485760}
 SPEED_URL=${VPN_CHECK_SPEED_URL:-https://proof.ovh.net/files/10Mb.dat}
+# 0 : un serveur validé n'est jamais retesté. Sinon, retest toutes les N secondes, tant qu'un autre tunnel est en vie.
+RECHECK_SECONDS=${VPN_CHECK_RECHECK_SECONDS:-0}
+TUNNEL_NAME=${VPN_CHECK_NAME:-}
+GATEWAY_UP_FILE=/gateway-state/up
 
 STATE=/tmp/vpn-check
 PASSED=$STATE.passed
+PASSED_AT=$STATE.passed_at
 TRIES=$STATE.tries
 
 /gluetun-entrypoint healthcheck >/dev/null 2>&1 || { echo "tunnel indisponible"; exit 1; }
 
 ip=$(cat /tmp/gluetun/ip 2>/dev/null)
 [ -n "$ip" ] || { echo "IP publique pas encore connue"; exit 1; }
-[ "$(cat $PASSED 2>/dev/null)" = "$ip" ] && exit 0
+
+# Le gateway publie dans GATEWAY_UP_FILE les tunnels en vie. Sans fichier lisible ou sans nom de tunnel,
+# on ne peut pas prouver qu'un autre tunnel prend le relais : pas de retest, donc jamais de coupure.
+another_tunnel_is_up() {
+	[ -n "$TUNNEL_NAME" ] || return 1
+	for up_tunnel_name in $(cat "$GATEWAY_UP_FILE" 2>/dev/null); do
+		[ "$up_tunnel_name" != "$TUNNEL_NAME" ] && return 0
+	done
+	return 1
+}
+
+validation_is_still_valid() {
+	[ "$(cat $PASSED 2>/dev/null)" = "$ip" ] || return 1
+	[ "$RECHECK_SECONDS" -gt 0 ] || return 0
+	validation_age_seconds=$(( $(date +%s) - $(cat $PASSED_AT 2>/dev/null || echo 0) ))
+	[ "$validation_age_seconds" -ge "$RECHECK_SECONDS" ] || return 0
+	another_tunnel_is_up || return 0
+	return 1
+}
+
+validation_is_still_valid && exit 0
 
 # /proc/uptime : la date de busybox ne donne pas les millisecondes.
 now_ms() { awk '{ printf "%d", $1 * 1000 }' /proc/uptime; }
@@ -60,4 +86,5 @@ mbps=$(( BYTES * 8 / elapsed / 1000 ))
 
 log "validé : ${latency} ms, ${mbps} Mbit/s"
 echo "$ip" >$PASSED
+date +%s >$PASSED_AT
 rm -f $TRIES
