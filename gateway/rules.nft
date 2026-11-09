@@ -70,8 +70,9 @@ table inet vpngw {
 		ip daddr @nexthops icmp type echo-request accept
 		ip6 daddr @nexthops6 icmpv6 type echo-request accept
 
-		# Services du LAN que l'application a le droit d'appeler (ALLOW_OUT).
-		ip daddr . tcp dport @allow_out accept
+		# Services du LAN que l'application a le droit d'appeler (ALLOW_OUT). Borné au LAN : un couple public
+		# ne doit pas échapper au contrôle de next-hop ci-dessous.
+		ip daddr $LAN ip daddr . tcp dport @allow_out accept
 
 		# aucune autre connexion vers le LAN Docker (bridge/host 172.30.20.1, proxy d'entrée, Gluetun)
 		ip daddr $LAN drop

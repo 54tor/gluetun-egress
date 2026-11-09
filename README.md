@@ -365,7 +365,7 @@ Une seule table, `inet vpngw` (les règles NAT du DNS embarqué Docker ne sont p
 |---|---|---|
 | `input` | drop | `lo` ; `established,related` ; découverte de voisins IPv6 seulement (rien d'autre n'entre en IPv6) ; **seul le proxy d'entrée (`INGRESS_IP`, 172.30.20.10) peut ouvrir une connexion, sur `APP_PORT`, plus les couples de `ALLOW_IN`** |
 | `forward` | drop | aucune |
-| `output` | drop | `127.0.0.11` drop (DNS embarqué Docker) ; `lo` ; `established,related` ; découverte de voisins IPv6 ; rien hors `eth0` ; DNS (53) seulement vers les Gluetun ; tout autre 53/853 drop ; ping vers les Gluetun ; rien d'autre vers le LAN Docker (IPv4 et IPv6), hors `ALLOW_OUT` ; **Internet seulement si le next-hop routé est un Gluetun** (`rt ip nexthop @nexthops` et `rt ip6 nexthop @nexthops6`) |
+| `output` | drop | `127.0.0.11` drop (DNS embarqué Docker) ; `lo` ; `established,related` ; découverte de voisins IPv6 ; rien hors `eth0` ; DNS (53) seulement vers les Gluetun ; tout autre 53/853 drop ; ping vers les Gluetun ; rien d'autre vers le LAN Docker (IPv4 et IPv6), hors `ALLOW_OUT` (couples du LAN seulement : un couple public suit la règle Internet) ; **Internet seulement si le next-hop routé est un Gluetun** (`rt ip nexthop @nexthops` et `rt ip6 nexthop @nexthops6`) |
 
 La dernière règle bloque toute sortie par une route qui ne passerait pas par un Gluetun, même si
 quelqu'un ajoutait `default via 172.30.20.1` dans le namespace.
