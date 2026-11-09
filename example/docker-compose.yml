@@ -130,8 +130,27 @@ services:
       vpn-gateway: { ipv4_address: 172.30.20.10 }   # accès direct L2 à l'application (172.30.20.2)
     restart: unless-stopped
 
+  # Le gateway ne monte pas le socket Docker : il parle à ce proxy, qui ne laisse passer que la relance des wgentry (README §7). Le
+  # socket filtré vit dans un volume que seul le gateway monte : l'application, qui partage son réseau mais pas son système de
+  # fichiers, n'y accède pas. Surveillance du port redirigé (PORT_FORWARD_n) : voir le README §7 pour les deux autorisations de plus.
+  socket-proxy:
+    image: wollomatic/socket-proxy:1
+    user: "0:0"                          # root sans capacité : propriétaire du socket de l'hôte, sans CAP_DAC_OVERRIDE
+    command:
+      - -proxysocketendpoint=/proxy/docker.sock
+      - -allowPOST=^(/v[0-9.]+)?/containers/vpnstack-wgentry[0-9]+-1/restart$$
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - docker-proxy:/proxy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
   gateway:
     build: ../gateway
+    depends_on:
+      socket-proxy: { condition: service_started }
     cap_add: [NET_ADMIN]
     sysctls:
       net.ipv4.ip_forward: "0"                  # l'app est locale au namespace : rien à forwarder
@@ -156,6 +175,13 @@ services:
       PROBE_TIMEOUT: ${PROBE_TIMEOUT}
       FAIL_THRESHOLD: ${FAIL_THRESHOLD}
       RISE_THRESHOLD: ${RISE_THRESHOLD}
+      DOCKER_SOCKET: /var/run/docker-proxy/docker.sock
+      # Conteneurs à relancer quand le Gluetun n revient après une panne (noms Compose : <projet>-<service>-1).
+      RESTART_DEPENDENTS_1: vpnstack-wgentry1-1
+      RESTART_DEPENDENTS_2: vpnstack-wgentry2-1
+      RESTART_DEPENDENTS_3: vpnstack-wgentry3-1
+    volumes:
+      - docker-proxy:/var/run/docker-proxy:ro      # socket Docker filtré par socket-proxy : relance de conteneurs seulement
     healthcheck:
       # "healthy" = firewall fail-closed chargé (PAS "un VPN est up") : l'app peut démarrer sans risque.
       test: ["CMD", "nft", "list", "table", "inet", "vpngw"]
@@ -178,6 +204,9 @@ services:
     depends_on:
       gateway: { condition: service_healthy, restart: true }
     restart: unless-stopped
+
+volumes:
+  docker-proxy:
 
 networks:
   frontend:

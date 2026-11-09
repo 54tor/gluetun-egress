@@ -17,6 +17,9 @@ PROBE_INTERVAL=${PROBE_INTERVAL:-5}
 PROBE_TIMEOUT=${PROBE_TIMEOUT:-4}
 FAIL_THRESHOLD=${FAIL_THRESHOLD:-3}
 RISE_THRESHOLD=${RISE_THRESHOLD:-3}
+# Facultatif : RESTART_DEPENDENTS_<n> liste les conteneurs en network_mode service:<Gluetun n> à relancer quand ce
+# Gluetun revient après une panne (ils restent « Up » sans réseau s'il a redémarré hors de Compose). Exige le socket.
+DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
 
 # Ces valeurs finissent dans sed et nft : seuls les caractères d'une adresse ou d'un couple ip:port passent.
 check() { echo "$2" | grep -Eq "^[$3 ]*\$" || { echo "gateway: $1 contient des caractères invalides" >&2; exit 1; }; }
@@ -41,6 +44,17 @@ ips_of() { if [ "$1" = 6 ]; then echo $VPN_IPS6; else echo $VPN_IPS; fi; }
 ipf() { f=$1; shift; if [ "$f" = 6 ]; then ip -6 "$@"; else ip "$@"; fi; }
 
 log() { echo "$(date -Iseconds) gateway: $*"; }
+
+restart_dependents() { # $1=n° du VPN revenu après une panne
+	eval "names=\${RESTART_DEPENDENTS_$1:-}"
+	for name in $names; do
+		echo "$name" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9_.-]*$' || { log "RESTART_DEPENDENTS_$1 : nom invalide ignoré"; continue; }
+		[ -S "$DOCKER_SOCKET" ] || { log "socket Docker absent : $name non relancé"; continue; }
+		code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 --unix-socket "$DOCKER_SOCKET" \
+			-X POST "http://docker/containers/$name/restart" 2>/dev/null) || code=erreur
+		log "vpn$1 revenu : relance de $name -> HTTP $code"
+	done
+}
 
 # 1. Firewall AVANT toute route : fail-closed dès le départ.
 #    ALLOW_IN / ALLOW_OUT : couples « ip:port » séparés par des espaces, mis en ensembles nftables.
@@ -73,7 +87,7 @@ for f in $FAMILIES; do
 		ipf $f route replace default via "$ip" dev eth0 table $((100 + i))
 		ipf $f rule del priority $((1000 + i)) 2>/dev/null || true
 		ipf $f rule add priority $((1000 + i)) uidrange $((UID_BASE + i))-$((UID_BASE + i)) lookup $((100 + i))
-		eval "ok${f}_$i=0 ko${f}_$i=0 up${f}_$i=0"
+		eval "ok${f}_$i=0 ko${f}_$i=0 up${f}_$i=0 down${f}_$i=0"
 	done
 	ipf $f rule add priority 1999 uidrange $((UID_BASE + 1))-$((UID_BASE + i)) unreachable
 done
@@ -132,11 +146,17 @@ while :; do
 		i=0
 		for ip in $(ips_of $f); do
 			i=$((i + 1))
-			eval "pid=\$pid${f}_$i ok=\$ok${f}_$i ko=\$ko${f}_$i up=\$up${f}_$i"
+			eval "pid=\$pid${f}_$i ok=\$ok${f}_$i ko=\$ko${f}_$i up=\$up${f}_$i down=\$down${f}_$i"
 			if wait "$pid"; then ok=$((ok + 1)); ko=0; else ko=$((ko + 1)); ok=0; fi
+			was_up=$up
 			[ "$ok" -ge "$RISE_THRESHOLD" ] && up=1
 			[ "$ko" -ge "$FAIL_THRESHOLD" ] && up=0
-			eval "ok${f}_$i=$ok ko${f}_$i=$ko up${f}_$i=$up"
+			[ "$was_up" = 1 ] && [ "$up" = 0 ] && down=1
+			if [ "$f" = 4 ] && [ "$was_up" = 0 ] && [ "$up" = 1 ] && [ "$down" = 1 ]; then
+				down=0
+				restart_dependents "$i" &
+			fi
+			eval "ok${f}_$i=$ok ko${f}_$i=$ko up${f}_$i=$up down${f}_$i=$down"
 			if [ "$up" = 1 ] && [ "$want" = none ]; then want=vpn$i want_ip=$ip; fi
 		done
 
