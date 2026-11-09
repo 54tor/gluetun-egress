@@ -18,9 +18,9 @@ TUNNEL_NAME=${VPN_CHECK_NAME:-}
 GATEWAY_UP_FILE=/gateway-state/up
 # Une IP recalée est recalée d'office, sans test, pendant ce délai (0 : aucune mémoire).
 BAD_TTL_SECONDS=${VPN_CHECK_BAD_TTL_SECONDS:-86400}
-# http : un téléchargement de VPN_CHECK_BYTES. ookla : speedtest d'Ookla (latence et débit), lourd : voir le README.
-ENGINE=${VPN_CHECK_ENGINE:-http}
-# L'acceptation de la licence d'Ookla est un acte de l'utilisateur : sans « yes », le moteur ookla recale tout serveur.
+# ookla : speedtest d'Ookla (latence et débit), lourd : voir le README. http : un téléchargement de VPN_CHECK_BYTES.
+ENGINE=${VPN_CHECK_ENGINE:-ookla}
+# L'acceptation de la licence d'Ookla est un acte de l'utilisateur : sans « yes », la mesure retombe sur http.
 OOKLA_ACCEPT_LICENSE=${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-no}
 # Le CLI d'Ookla n'est pas dans l'image (binaire non redistribuable) : téléchargé une fois, par le tunnel validé, et gardé dans /tmp.
 OOKLA_VERSION=${VPN_CHECK_OOKLA_VERSION:-1.2.0}
@@ -125,9 +125,57 @@ measure_with_http() {
 	mbps=$(( BYTES * 8 / elapsed / 1000 ))
 }
 
+# Contrôles du CLI Ookla téléchargé ($1 = archive, $2 = dossier d'extraction), faute de somme de contrôle publiée : taille, contenu de
+# l'archive, en-tête ELF x86_64, version annoncée. 0 si le binaire est exploitable.
+check_speedtest_archive() {
+	size=$(wc -c <"$1")
+	if [ "$size" -lt 500000 ] || [ "$size" -gt 30000000 ]; then
+		log "CLI Ookla refusé : $size octets reçus, hors de 0,5 à 30 Mo"
+		return 1
+	fi
+	members=$(tar -tzf "$1" 2>/dev/null)
+	echo "$members" | grep -qx 'speedtest' || { log "CLI Ookla refusé : speedtest absent de l'archive"; return 1; }
+	if echo "$members" | grep -qE '^/|(^|/)\.\.(/|$)'; then
+		log "CLI Ookla refusé : chemin absolu ou « .. » dans l'archive"
+		return 1
+	fi
+	tar -xzf "$1" -C "$2" speedtest 2>/dev/null
+	{ [ -f "$2/speedtest" ] && [ ! -L "$2/speedtest" ]; } || { log "CLI Ookla refusé : speedtest n'est pas un fichier ordinaire"; return 1; }
+	header=$(od -An -tx1 -N20 "$2/speedtest" | tr -d ' \n')
+	if [ "$(echo "$header" | cut -c1-10)" != 7f454c4602 ] || [ "$(echo "$header" | cut -c37-40)" != 3e00 ]; then
+		log "CLI Ookla refusé : ce n'est pas un exécutable ELF x86_64"
+		return 1
+	fi
+	chmod 755 "$2/speedtest"
+	version_line=$(timeout 10 "$2/speedtest" --version 2>/dev/null | head -n 1)
+	echo "$version_line" | grep -q "Speedtest by Ookla $OOKLA_VERSION" || { log "CLI Ookla refusé : version annoncée « $version_line », attendue $OOKLA_VERSION"; return 1; }
+}
+
+# 0 si $SPEEDTEST_BIN est prêt. Le téléchargement passe par le tunnel (HTTPS, certificats vérifiés par wget, aucune redirection suivie),
+# lu sur 30 Mo au plus et 30 s au plus.
+fetch_speedtest() {
+	[ -x "$SPEEDTEST_BIN" ] && return 0
+	last_failure=$(cat "$SPEEDTEST_DIR.failed" 2>/dev/null || echo 0)
+	[ $(( $(date +%s) - last_failure )) -ge "$OOKLA_RETRY_SECONDS" ] || return 1
+	date +%s >"$SPEEDTEST_DIR.failed"
+	case "$OOKLA_URL" in https://*) ;; *) log "CLI Ookla refusé : VPN_CHECK_OOKLA_URL doit être en https"; return 1 ;; esac
+	[ "$(uname -m)" = x86_64 ] || { log "CLI Ookla : architecture $(uname -m), x86_64 seulement"; return 1; }
+	fetch_dir=$(mktemp -d) || return 1
+	timeout 30 wget -q -T 20 --max-redirect=0 -O - "$OOKLA_URL" 2>/dev/null | head -c 30000001 >"$fetch_dir/ookla.tgz"
+	if check_speedtest_archive "$fetch_dir/ookla.tgz" "$fetch_dir" && mkdir -p "$SPEEDTEST_DIR" && mv "$fetch_dir/speedtest" "$SPEEDTEST_BIN"; then
+		rm -f "$SPEEDTEST_DIR.failed"
+		log "CLI Ookla $OOKLA_VERSION téléchargé et contrôlé"
+	fi
+	rm -rf "$fetch_dir"
+	[ -x "$SPEEDTEST_BIN" ]
+}
+
 measure_with_ookla() {
-	[ "$OOKLA_ACCEPT_LICENSE" = yes ] || reject "licence Ookla non acceptée (VPN_CHECK_OOKLA_ACCEPT_LICENSE=yes)"
-	[ -x "$SPEEDTEST_BIN" ] || reject "binaire speedtest absent de /gateway-state"
+	if ! fetch_speedtest; then
+		log "CLI Ookla indisponible : mesure HTTP à la place"
+		measure_with_http
+		return
+	fi
 
 	wget -q -T 5 -O /dev/null https://9.9.9.9/ || reject "9.9.9.9 muet"
 	for url in $URLS; do
@@ -143,6 +191,10 @@ measure_with_ookla() {
 	[ $latency -le "$MAX_LATENCY_MS" ] || reject "latence ${latency} ms > ${MAX_LATENCY_MS} ms"
 }
 
+if [ "$ENGINE" = ookla ] && [ "$OOKLA_ACCEPT_LICENSE" != yes ]; then
+	log "moteur ookla sans VPN_CHECK_OOKLA_ACCEPT_LICENSE=yes : mesure HTTP à la place"
+	ENGINE=http
+fi
 if [ "$ENGINE" = ookla ]; then measure_with_ookla; else measure_with_http; fi
 [ $mbps -ge "$MIN_MBPS" ] || reject "débit ${mbps} Mbit/s < ${MIN_MBPS} Mbit/s"
 

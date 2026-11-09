@@ -590,8 +590,8 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_BYTES` | `10485760` (taille exacte du fichier ci-dessus, base du calcul du débit) |
 | `VPN_CHECK_MAX_REROLLS` | `8` |
 | `VPN_CHECK_BAD_TTL_SECONDS` | `86400` (une IP recalée l'est d'office, sans test, pendant ce délai ; `0` : aucune mémoire) |
-| `VPN_CHECK_ENGINE` | `http` (téléchargement de `VPN_CHECK_BYTES`) ou `ookla` (speedtest d'Ookla : latence et débit, voir ci-dessous) |
-| `VPN_CHECK_OOKLA_ACCEPT_LICENSE` | `no`. Moteur `ookla` : `yes` pour accepter la licence d'Ookla, sinon tout serveur est recalé |
+| `VPN_CHECK_ENGINE` | `ookla` (speedtest d'Ookla : latence et débit, voir ci-dessous) ou `http` (téléchargement de `VPN_CHECK_BYTES`) |
+| `VPN_CHECK_OOKLA_ACCEPT_LICENSE` | `no`. `yes` pour accepter la licence d'Ookla ; sans lui, le moteur `ookla` se replie sur `http` (une ligne dans les logs) |
 | `VPN_CHECK_OOKLA_TIMEOUT` | `50` (secondes, sous le `timeout` du healthcheck) |
 | `VPN_CHECK_OOKLA_VERSION` | `1.2.0` (version attendue du CLI) |
 | `VPN_CHECK_OOKLA_URL` | `https://install.speedtest.net/app/cli/ookla-speedtest-<version>-linux-x86_64.tgz` (HTTPS obligatoire) |
@@ -606,8 +606,8 @@ serveur de contrôle n'écoute que sur la boucle locale et refuse toute requête
 le temps des remplacements : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé.
 ⚠️ `SERVER_NAMES` réduit à un seul serveur rend le remplacement inopérant.
 
-**Moteur `ookla`.** Le CLI d'Ookla n'est **pas** dans l'image (binaire non redistribuable) : `vpn-check.sh` le télécharge une fois, par le tunnel qui vient d'être validé, dans `/tmp` du Gluetun (`VPN_CHECK_OOKLA_URL`, version `VPN_CHECK_OOKLA_VERSION`). Ookla ne publie pas de somme de contrôle : l'authenticité repose sur HTTPS (certificats vérifiés, aucune redirection suivie), et le fichier est refusé s'il échoue à l'un de ces contrôles : taille de 0,5 à 30 Mo, archive contenant `speedtest` sans chemin absolu ni `..`, en-tête ELF x86_64, `speedtest --version` annonçant la version attendue. Il s'exécute en root dans le Gluetun : l'URL de téléchargement est donc une frontière de confiance. Si le téléchargement ou un contrôle échoue, la mesure retombe sur le moteur `http` (une ligne dans les logs) et le téléchargement est retenté après `VPN_CHECK_OOKLA_RETRY_SECONDS`. Le Gluetun perd son binaire à sa recréation : il est alors retéléchargé. Avec `VPN_CHECK_ENGINE=ookla`, la latence et le débit viennent de son test
-(la joignabilité de `VPN_CHECK_URLS` reste testée). Trois points à savoir avant de l'activer :
+**Moteur `ookla`.** Le CLI d'Ookla n'est **pas** dans l'image (binaire non redistribuable) : `vpn-check.sh` le télécharge une fois, par le tunnel qui vient d'être validé, dans `/tmp` du Gluetun (`VPN_CHECK_OOKLA_URL`, version `VPN_CHECK_OOKLA_VERSION`). Ookla ne publie pas de somme de contrôle : l'authenticité repose sur HTTPS (certificats vérifiés, aucune redirection suivie), et le fichier est refusé s'il échoue à l'un de ces contrôles : taille de 0,5 à 30 Mo, archive contenant `speedtest` sans chemin absolu ni `..`, en-tête ELF x86_64, `speedtest --version` annonçant la version attendue. Il s'exécute en root dans le Gluetun : l'URL de téléchargement est donc une frontière de confiance. Si le téléchargement ou un contrôle échoue, la mesure retombe sur le moteur `http` (une ligne dans les logs) et le téléchargement est retenté après `VPN_CHECK_OOKLA_RETRY_SECONDS`. Le Gluetun perd son binaire à sa recréation : il est alors retéléchargé. C'est le moteur par défaut : la latence et le débit viennent de son test
+(la joignabilité de `VPN_CHECK_URLS` reste testée), à condition d'avoir posé `VPN_CHECK_OOKLA_ACCEPT_LICENSE=yes`. Trois points à savoir avant de l'activer :
 - **Licence :** le CLI se déclare réservé à un usage personnel et non commercial, sur un ordinateur personnel, et
   n'est pas redistribuable. Le script ne passe `--accept-license` que si `VPN_CHECK_OOKLA_ACCEPT_LICENSE=yes`, c'est
   donc ton acceptation.

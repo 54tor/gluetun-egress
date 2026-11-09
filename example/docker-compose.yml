@@ -53,7 +53,7 @@ services:
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24,fd30:20::/64
       VPN_CHECK_NAME: vpn1              # nom du tunnel dans /run/gateway/up (rang dans VPN_IPS du gateway)
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
-      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
+      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-ookla}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-no}
     volumes:
       - gateway-state:/gateway-state:ro
@@ -76,7 +76,7 @@ services:
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24,fd30:20::/64
       VPN_CHECK_NAME: vpn2
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
-      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
+      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-ookla}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-no}
     volumes:
       - gateway-state:/gateway-state:ro
@@ -99,7 +99,7 @@ services:
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24
       VPN_CHECK_NAME: vpn3
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
-      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
+      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-ookla}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-no}
     volumes:
       - gateway-state:/gateway-state:ro
