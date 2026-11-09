@@ -346,7 +346,7 @@ Puis, en boucle toutes les `PROBE_INTERVAL` secondes :
   écrit dans `/run/gateway/active` (`vpn1`, `vpn2`, `vpn3` ou `none`) et chaque changement est loggé
   (`sortie active -> …`).
 
-C'est du **failover**, pas du load-balancing : un seul VPN porte le trafic à un instant donné.
+En `failover` (défaut), un seul VPN porte le trafic à un instant donné ; la répartition n'existe qu'en `balance-*`.
 
 **Connexions existantes** : lors d'une bascule, elles partent vers un autre VPN avec une autre IP
 source ; le serveur distant répond par un RST et elles meurent. Les nouvelles connexions utilisent
@@ -709,7 +709,7 @@ reconnexion puis revient.
 ### Ajouter un 4ᵉ VPN
 
 1. `.env.vpn4` (droits 600).
-2. `gluetun4/iptables/post-rules.txt` : copie de `gluetun3` avec `172.30.20.13` → `172.30.20.14`.
+2. `gluetun/post-rules-4.txt` : copie de `post-rules-3.txt` avec `172.30.20.13` → `172.30.20.14` et `fd30:20::13` → `fd30:20::14`.
 3. Dans `docker-compose.yml` : services `gluetun4` (`.10.14` / `.20.14`) et `wgentry4` sur le
    modèle de `gluetun3`/`wgentry3` ; ajouter `172.30.10.14` à
    `trusted_proxies` du `Caddyfile` ; ajouter `172.30.20.14` à `VPN_IPS` du gateway

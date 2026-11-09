@@ -1,7 +1,7 @@
 # Versions supposées : Docker Engine >= 28 (testé 29.8.1), Docker Compose >= 2.24 (testé 5.5.1),
 # Testé avec Gluetun v3.41.3 ; les images ne sont pas épinglées.
 #
-# Plan d'adressage (doit rester cohérent avec .env, gateway/*, gluetun*/iptables/*, caddy/*) :
+# Plan d'adressage (doit rester cohérent avec .env, gateway/*, gluetun/post-rules-*.txt, caddy/*) :
 #   frontend    172.30.10.0/24  caddy .10   | gluetun1 .11 | gluetun2 .12 | gluetun3 .13
 #   vpn-gateway 172.30.20.0/24  gateway .2  | caddy   .10 | gluetun1 .11 | gluetun2 .12 | gluetun3 .13  (internal)
 
