@@ -192,7 +192,7 @@ ou le même port d'un autre hôte, reste fermé.
 
 Versions supposées et testées : Docker Engine 29.8.1 (≥ 28 requis pour
 `com.docker.network.endpoint.sysctls`), Docker Compose 5.5.1 (≥ 2.24 pour `depends_on.restart`),
-Gluetun **v3.41.3**, wgentry 2026.9.3, Caddy 2.9.1, Alpine 3.24. Le comportement de Gluetun
+Gluetun **v3.41.3** (comportement vérifié dans son code source), wireproxy, Caddy et Alpine en images non épinglées (`latest`). Le comportement de Gluetun
 décrit ici a été vérifié dans son code source v3.41.3 ; revérifier `post-rules.txt` en cas de montée
 de version majeure.
 
@@ -545,7 +545,7 @@ root : `sh host/tests/firewall/run.sh`.
 
 ---
 
-### 4.8 Qualité du serveur VPN (`gluetun/vpn-check.sh`)
+### 4.8 Qualité du serveur VPN (`gateway/vpn-check.sh`)
 
 Gluetun tire un serveur au hasard dans son filtre (`SERVER_CITIES`…) ; sa sonde native ne dit que « une
 connexion sort ». `vpn-check.sh` remplace la sonde Docker de chaque Gluetun : il appelle la sonde native, puis,
@@ -567,7 +567,9 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_RECHECK_SECONDS` | `0` (jamais : un serveur validé n'est pas retesté tant que l'IP ne change pas) |
 | `VPN_CHECK_NAME` | `vpn1`, `vpn2`… : le nom du tunnel côté gateway (rang dans `VPN_IPS`), requis pour le retest |
 
-Câblage dans chaque service Gluetun : monter `vpn-check.sh` sur `/vpn-check.sh` et `auth.toml` sur
+Câblage dans chaque service Gluetun : `vpn-check.sh` est livré **dans l'image du gateway**, qui le dépose à chaque
+démarrage dans le volume `gateway-state` ; monter ce volume en lecture seule sur `/gateway-state`, régler le
+`healthcheck` sur `["CMD", "sh", "/gateway-state/vpn-check.sh"]`, monter `auth.toml` sur
 `/gluetun/auth/config.toml`, et poser `HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` — ⚠️ le rôle est sans
 authentification, le serveur de contrôle ne doit donc écouter que sur la boucle locale. `start_period: 4m` laisse
 le temps des remplacements : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé.

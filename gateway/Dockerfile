@@ -11,6 +11,7 @@ LABEL org.opencontainers.image.title="gluetun-egress-gateway" \
 RUN apk add --no-cache iproute2 nftables curl su-exec
 
 COPY rules.nft /etc/gateway/rules.nft
+COPY vpn-check.sh /usr/local/share/gateway/vpn-check.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 

@@ -22,7 +22,7 @@ x-gluetun: &gluetun
     - 9.9.9.9
   # Un serveur lent ou muet est recalé et remplacé avant que la pile démarre (gluetun-egress, vpn-check.sh).
   healthcheck:
-    test: ["CMD", "/vpn-check.sh"]
+    test: ["CMD", "sh", "/gateway-state/vpn-check.sh"]   # déposé par le gateway dans le volume gateway-state
     interval: 30s
     timeout: 60s
     retries: 3
@@ -53,7 +53,6 @@ services:
     volumes:
       - gateway-state:/gateway-state:ro
       - ../gluetun/post-rules-1.txt:/iptables/post-rules.txt:ro
-      - ../gluetun/vpn-check.sh:/vpn-check.sh:ro
       - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.11 }
@@ -73,7 +72,6 @@ services:
     volumes:
       - gateway-state:/gateway-state:ro
       - ../gluetun/post-rules-2.txt:/iptables/post-rules.txt:ro
-      - ../gluetun/vpn-check.sh:/vpn-check.sh:ro
       - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.12 }
@@ -93,7 +91,6 @@ services:
     volumes:
       - gateway-state:/gateway-state:ro
       - ../gluetun/post-rules-3.txt:/iptables/post-rules.txt:ro
-      - ../gluetun/vpn-check.sh:/vpn-check.sh:ro
       - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.13 }
@@ -196,7 +193,7 @@ services:
       RESTART_DEPENDENTS_3: vpnstack-wgentry3-1
     volumes:
       - docker-proxy:/var/run/docker-proxy:ro      # socket Docker filtré par socket-proxy : relance de conteneurs seulement
-      - gateway-state:/run/gateway                  # tunnels en vie (fichier « up »), lus par vpn-check.sh des Gluetun
+      - gateway-state:/run/gateway                  # donne aux Gluetun vpn-check.sh et la liste des tunnels en vie (« up »)
     healthcheck:
       # "healthy" = firewall fail-closed chargé (PAS "un VPN est up") : l'app peut démarrer sans risque.
       test: ["CMD", "nft", "list", "table", "inet", "vpngw"]
@@ -211,7 +208,7 @@ services:
     restart: unless-stopped
 
   app:
-    image: traefik/whoami:latest          # remplacer par l'application réelle
+    image: traefik/whoami:latest        # remplacer par l'application réelle
     command: ["--port", "${APP_PORT}"]
     network_mode: "service:gateway"      # partage netns, /etc/resolv.conf et /etc/hosts du gateway
     cap_drop: [ALL]                      # sans NET_RAW : pas de socket brut qui contourne nftables

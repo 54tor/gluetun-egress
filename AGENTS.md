@@ -25,7 +25,7 @@ sous-réseau ni un port seul. Toute demande plus large se refuse ou s'arbitre ex
 
 | Chemin | Rôle |
 |---|---|
-| `gateway/` | Image du gateway : `entrypoint.sh` (firewall, routes, sondes, failover), `rules.nft` |
+| `gateway/` | Image du gateway : `entrypoint.sh` (firewall, routes, sondes, failover), `rules.nft`, `vpn-check.sh` (sonde de santé des Gluetun, déposée dans le volume `gateway-state`) |
 | `gluetun/post-rules-N.txt` | Forwarding et NAT gateway → `tun0` dans le Gluetun N ; l'IP y est celle du plan d'adressage |
 | `example/` | Une pile complète qui tourne, et qui sert de test à la main |
 | `example/wgentry/`, `example/relay/` | Modèles des tunnels WireGuard d'entrée (wireproxy dans chaque Gluetun) et du relais public qui les reçoit |

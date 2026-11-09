@@ -115,6 +115,10 @@ set_dns() { { for n in "$@"; do echo "nameserver $n"; done; echo "options timeou
 set_dns $VPN_IPS
 
 mkdir -p /run/gateway
+# vpn-check.sh : la sonde de santé des Gluetun, livrée avec l'image et déposée dans le volume partagé à chaque
+# démarrage (mv : un Gluetun ne lit jamais un fichier à moitié écrit).
+cp /usr/local/share/gateway/vpn-check.sh /run/gateway/.vpn-check.sh.tmp
+mv /run/gateway/.vpn-check.sh.tmp /run/gateway/vpn-check.sh
 
 probe() { # $1=uid $2=ip gluetun $3=nom $4=famille -> 0 si Internet joignable à travers CE tunnel
 	rc=0
