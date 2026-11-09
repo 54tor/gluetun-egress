@@ -25,7 +25,8 @@ RISE_THRESHOLD=${RISE_THRESHOLD:-3}
 DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
 
 # Ces valeurs finissent dans sed et nft : seuls les caractères d'une adresse ou d'un couple ip:port passent.
-check() { echo "$2" | grep -Eq "^[$3 ]*\$" || { echo "gateway: $1 contient des caractères invalides" >&2; exit 1; }; }
+# `case` et non grep : grep valide ligne par ligne, une valeur sur plusieurs lignes passerait.
+check() { case "$2" in *[!$3' ']*) echo "gateway: $1 contient des caractères invalides" >&2; exit 1 ;; esac; }
 case "$EGRESS_MODE" in failover|balance-dest|balance-flow) ;; *) echo "gateway: EGRESS_MODE doit valoir failover, balance-dest ou balance-flow" >&2; exit 1 ;; esac
 check ALLOW_IN "$ALLOW_IN" '0-9.:'
 check ALLOW_OUT "$ALLOW_OUT" '0-9.:'
