@@ -44,7 +44,9 @@ services:
     env_file: [.env.vpn1]             # VPN_SERVICE_PROVIDER, VPN_TYPE, clés/identifiants du fournisseur 1
     environment:
       HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"   # boucle locale seulement : le rôle ci-dessous est sans authentification
-      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"none"}'   # vpn-check.sh change de serveur par PUT /v1/vpn/status
+      # Clé d'API sur toute l'API de contrôle ; vpn-check.sh la présente pour changer de serveur (PUT /v1/vpn/status).
+      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"apikey","apikey":"${VPN_CHECK_APIKEY:?VPN_CHECK_APIKEY à définir dans .env}"}'
+      VPN_CHECK_APIKEY: ${VPN_CHECK_APIKEY}
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
@@ -63,7 +65,9 @@ services:
     env_file: [.env.vpn2]             # VPN_SERVICE_PROVIDER, VPN_TYPE, clés/identifiants du fournisseur 2
     environment:
       HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"   # boucle locale seulement : le rôle ci-dessous est sans authentification
-      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"none"}'   # vpn-check.sh change de serveur par PUT /v1/vpn/status
+      # Clé d'API sur toute l'API de contrôle ; vpn-check.sh la présente pour changer de serveur (PUT /v1/vpn/status).
+      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"apikey","apikey":"${VPN_CHECK_APIKEY:?VPN_CHECK_APIKEY à définir dans .env}"}'
+      VPN_CHECK_APIKEY: ${VPN_CHECK_APIKEY}
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
@@ -82,7 +86,9 @@ services:
     env_file: [.env.vpn3]             # VPN_SERVICE_PROVIDER, VPN_TYPE, clés/identifiants du fournisseur 3
     environment:
       HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"   # boucle locale seulement : le rôle ci-dessous est sans authentification
-      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"none"}'   # vpn-check.sh change de serveur par PUT /v1/vpn/status
+      # Clé d'API sur toute l'API de contrôle ; vpn-check.sh la présente pour changer de serveur (PUT /v1/vpn/status).
+      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"apikey","apikey":"${VPN_CHECK_APIKEY:?VPN_CHECK_APIKEY à définir dans .env}"}'
+      VPN_CHECK_APIKEY: ${VPN_CHECK_APIKEY}
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.

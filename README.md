@@ -218,6 +218,7 @@ cp .env.example .env && chmod 600 .env
 | `PROBE_TIMEOUT` | `4` | Timeout de chaque requête de sonde |
 | `FAIL_THRESHOLD` | `3` | Échecs consécutifs avant de déclarer un VPN mort |
 | `RISE_THRESHOLD` | `3` | Succès consécutifs avant de le réintégrer |
+| `VPN_CHECK_APIKEY` | — | Clé d'API du serveur de contrôle de chaque Gluetun, présentée par `vpn-check.sh` pour changer de serveur. Obligatoire dans l'exemple. Voir §3.2.1 |
 | `VPN_CHECK_RECHECK_SECONDS` | `0` | Retest périodique du débit et de la latence d'un serveur VPN, en secondes (`0` : jamais, un serveur validé n'est retesté que si l'IP change). Ex. `1800`. Voir §3.2.1 |
 
 ### 3.2 `.env.vpnN`
@@ -273,11 +274,11 @@ Facultatif mais recommandé : il écarte les serveurs lents avant que la pile d�
    liste des tunnels en vie. Aucun fichier à copier, aucun socket Docker.
 2. **Sonde de santé** du Gluetun : `healthcheck.test: ["CMD", "sh", "/gateway-state/vpn-check.sh"]`, avec
    `interval: 30s`, `timeout: 60s`, `retries: 3`, `start_period: 4m`, `start_interval: 10s`.
-3. **Serveur de contrôle** : poser `HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` et
-   `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE='{"auth":"none"}'`. ⚠️ Ce rôle par défaut s'applique à **toute** l'API de
-   Gluetun (une liste de routes n'y est pas prise en compte, testé en v3.41.3) : arrêt, relance et réglages du VPN
-   sont ouverts, sans authentification, à tout ce qui atteint `127.0.0.1:8000`, c'est-à-dire le Gluetun et les
-   conteneurs qui partagent son réseau (les `wgentry`). La boucle locale est donc obligatoire.
+3. **Serveur de contrôle** : poser `HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` (boucle locale seulement) et
+   `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE='{"auth":"apikey","apikey":"<clé>"}'`, avec la même `<clé>` dans
+   `VPN_CHECK_APIKEY` (variable d'environnement du Gluetun, lue par `vpn-check.sh` qui l'envoie dans l'en-tête
+   `X-API-Key`). Le rôle par défaut couvre toute l'API : sans la clé, toute requête est refusée (401, testé en v3.41.3).
+   Dans l'exemple, la clé vient de `VPN_CHECK_APIKEY` du `.env`, obligatoire.
 4. **Nom du tunnel** : `VPN_CHECK_NAME=vpn1` sur le premier Gluetun de `VPN_IPS`, `vpn2` sur le deuxième, etc.
    Requis pour le retest, inutile sans.
 5. **Retest** (facultatif) : `VPN_CHECK_RECHECK_SECONDS=1800` sur chaque Gluetun, ou dans le `.env` si le compose le
@@ -594,8 +595,8 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 
 Câblage (pas à pas au §3.2.1) : `vpn-check.sh` est livré **dans l'image du gateway**, qui le dépose à chaque
 démarrage dans le volume `gateway-state` ; les Gluetun le montent en lecture seule, avec
-`HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` et `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE='{"auth":"none"}'` — ⚠️ ce rôle
-ouvre toute l'API sans authentification (§3.2.1) : le serveur de contrôle ne doit écouter que sur la boucle locale. `start_period: 4m` laisse
+`HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` et une clé d'API (`HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE`, §3.2.1) : le
+serveur de contrôle n'écoute que sur la boucle locale et refuse toute requête sans la clé. `start_period: 4m` laisse
 le temps des remplacements : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé.
 ⚠️ `SERVER_NAMES` réduit à un seul serveur rend le remplacement inopérant.
 
@@ -731,6 +732,27 @@ intempestives sur un VPN lent.
 Modifier `SERVER_COUNTRIES` / `SERVER_CITIES` dans `.env.vpnN`, puis `docker compose up -d` : Compose
 recrée `gluetunN` et son `wgentryN`. Le gateway bascule sur un autre VPN pendant la
 reconnexion puis revient.
+
+**À chaud, par l'API de Gluetun** (sans recréer le conteneur) : `PUT /v1/vpn/settings` avec les réglages complets et la clé d'API
+dans `X-API-Key` (`VPN_CHECK_APIKEY` du `.env`). Le Gluetun se reconnecte au nouveau filtre en quelques secondes (essai : France,
+Allemagne, puis France/Marseille, 8 s chacun) ; le gateway bascule sur un autre VPN pendant ce temps. Il faut `jq` sur l'hôte.
+
+```sh
+set -a; . ./.env; set +a                       # charge VPN_CHECK_APIKEY
+C=vpnstack-gluetun1-1
+api() { docker exec "$C" wget -qO- --header="X-API-Key: $VPN_CHECK_APIKEY" "$@"; }
+corps=$(api http://127.0.0.1:8000/v1/vpn/settings \
+  | jq -c '.provider.server_selection.countries=["germany"] | .provider.server_selection.cities=null')
+api --header='Content-Type: application/json' --method=PUT --body-data="$corps" http://127.0.0.1:8000/v1/vpn/settings
+api http://127.0.0.1:8000/v1/publicip/ip                      # pays et ville effectifs
+```
+
+- Noms en anglais et en minuscules ; remettre `cities` à `null` en changeant de pays (les filtres se cumulent). Pour une ville :
+  `.provider.server_selection.cities=["marseille"]`.
+- **Non persistant** : à la recréation du conteneur, `.env.vpnN` reprend la main. Reporter le choix dans le fichier.
+- `--body-data` et non `--body-file=/dev/stdin` : ce dernier est ignoré sans erreur.
+- Le `GET` renvoie les réglages **avec la clé privée WireGuard** : ne pas le journaliser. La route n'est pas dans la documentation de
+  Gluetun (essai du 2026-11-19 sur `latest`) : la rejouer après une montée de version.
 
 ### Ajouter un 4ᵉ VPN
 

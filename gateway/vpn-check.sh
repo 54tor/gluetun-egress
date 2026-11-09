@@ -4,7 +4,7 @@
 # joignabilité à travers le tunnel. Un serveur recalé est remplacé (Gluetun en retire un au hasard dans
 # son filtre) jusqu'à VPN_CHECK_MAX_REROLLS fois ; au-delà, le conteneur reste unhealthy.
 #
-# Exige le serveur de contrôle sur 127.0.0.1:8000 et son rôle par défaut sans authentification (README §3.2.1).
+# Exige le serveur de contrôle sur 127.0.0.1:8000, protégé par la clé d'API VPN_CHECK_APIKEY (README §3.2.1).
 
 MIN_MBPS=${VPN_CHECK_MIN_MBPS:-20}
 MAX_LATENCY_MS=${VPN_CHECK_MAX_LATENCY_MS:-300}
@@ -89,7 +89,7 @@ reject() {
 	log "recalé ($1), changement de serveur ($tries/$MAX_REROLLS)"
 	for status in stopped running; do
 		wget -q -T 10 -O /dev/null --method=PUT --header='Content-Type: application/json' \
-			--body-data="{\"status\":\"$status\"}" http://127.0.0.1:8000/v1/vpn/status
+			--header="X-API-Key: $VPN_CHECK_APIKEY" --body-data="{\"status\":\"$status\"}" http://127.0.0.1:8000/v1/vpn/status
 	done
 	exit 1
 }
