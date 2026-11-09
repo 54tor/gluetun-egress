@@ -77,7 +77,8 @@ remember_bad_ip() {
 }
 
 reject() {
-	remember_bad_ip
+	# Un recalage d'office garde la date du recalage d'origine : sinon l'IP n'expirerait jamais.
+	ip_is_recently_bad || remember_bad_ip
 	tries=$(( $(cat $TRIES 2>/dev/null || echo 0) + 1 ))
 	echo $tries >$TRIES
 	if [ $tries -gt "$MAX_REROLLS" ]; then
