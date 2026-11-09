@@ -1,0 +1,3 @@
+# Variables posées par eval (RESTART_DEPENDENTS_<n>, PORT_FORWARD_<n>…), assignations vides en tête de ligne et fichiers lus par `.` :
+# shellcheck ne les suit pas, ce ne sont pas des défauts.
+disable=SC2154,SC1007,SC1090

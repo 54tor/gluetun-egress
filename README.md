@@ -140,6 +140,28 @@ L'exemple ci-dessus est un exemple : l'ordre Nord, Proton, custom n'a de sens qu
 
 Les chemins de ce document qui commencent par `docker-compose.yml`, `.env*` ou `caddy/` sont ceux de `example/`.
 
+### Image publiée
+
+Chaque tag `vX.Y.Z` publie `ghcr.io/54tor/gluetun-egress-gateway:X.Y.Z` (et `X.Y`, `X`, `latest`), construite par
+`.github/workflows/image.yml` ; un push sur `main` publie `edge`. Pour l'utiliser à la place de `build: ../gateway`,
+mettre `image: ghcr.io/54tor/gluetun-egress-gateway:latest` dans le service `gateway`.
+
+**Construire l'image soi-même** (dépôt : <https://github.com/54tor/gluetun-egress>) :
+
+```sh
+docker build -t gluetun-egress-gateway https://github.com/54tor/gluetun-egress.git#v1.0.0:gateway        # sans cloner
+git clone https://github.com/54tor/gluetun-egress.git && docker build -t gluetun-egress-gateway gluetun-egress/gateway
+cd gluetun-egress/example && docker compose up -d --build                                              # le compose construit `gateway`
+```
+
+`#v1.0.0:gateway` : la révision (tag, branche ou commit), puis le sous-dossier du contexte. Le build n'a besoin d'aucun secret ; le
+CLI d'Ookla n'est pas téléchargé à la construction (§4.8).
+
+Première publication refusée (`permission_denied: write_package`) : le paquet existe déjà sans être lié au dépôt (créé à la main, ou
+sans le label `org.opencontainers.image.source`). Sur GitHub : Packages, `gluetun-egress-gateway`, Package settings, « Manage Actions
+access », ajouter le dépôt avec le rôle Write ; ou supprimer le paquet vide et relancer le job. Le workflow demande déjà
+`packages: write` ; un réglage de l'organisation (Settings, Actions, Workflow permissions) peut le brider.
+
 ### Brancher ce gateway sur une autre application
 
 Le gateway ne connaît pas l'application : il en connaît le **port** et ce qu'elle a le droit d'appeler.
@@ -265,7 +287,8 @@ Mettre l'IP, pas `caddy` : le DNS de Gluetun ne résout pas les noms Docker.
 
 ### 3.4 Démarrer
 
-Depuis `example/` (copier d'abord `example/.env.example` en `.env`, et créer les trois `.env.vpnN`) :
+Récupérer le dépôt (`git clone --branch v1.0.0 https://github.com/54tor/gluetun-egress.git`), puis, depuis `example/` (copier d'abord
+`example/.env.example` en `.env`, et créer les trois `.env.vpnN`) :
 
 ```sh
 docker compose up -d --build
@@ -561,6 +584,9 @@ docker run --rm --cap-add NET_ADMIN -e ALLOW_IN="172.30.20.10:4041" -e ALLOW_OUT
     nft -c -D LAN=172.30.20.0/24 -D LAN6=fd30:20::/64 -D INGRESS=172.30.20.10 -D APP_PORT=8080 \
       -D NEXTHOPS="{ 172.30.20.11, 172.30.20.12 }" -f /run/rules.nft && echo ok'
 ```
+
+**Contrôles statiques.** `sh tools/lint.sh` lance shellcheck, hadolint, actionlint et gitleaks (historique compris), chacun dans un
+conteneur Docker ; la CI le lance avant de construire l'image.
 
 **La pile réelle**, ci-dessous.
 

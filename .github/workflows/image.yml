@@ -1,0 +1,95 @@
+# Contrôles statiques, tests des scripts, construction de l'image du gateway, contrôle de ses règles, puis publication sur GHCR.
+# Un tag vX.Y.Z publie X.Y.Z, X.Y, X et latest ; un push sur main publie edge.
+name: image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - gateway/**
+      - gluetun/**
+      - host/**
+      - tools/**
+      - .shellcheckrc
+      - .hadolint.yaml
+      - .github/workflows/image.yml
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: shellcheck, hadolint, actionlint, gitleaks
+        run: sh tools/lint.sh
+
+  image:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tests des scripts
+        run: |
+          set -eu
+          sh -n gateway/entrypoint.sh
+          for t in gateway/tests/*/run.sh gluetun/tests/*/run.sh host/tests/*/run.sh tools/tests/*/run.sh; do [ -f "$t" ] || continue; echo "== $t"; sh "$t"; done
+
+      - name: Construire
+        run: |
+          set -eu
+          owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE=$REGISTRY/$owner/gluetun-egress-gateway" >> "$GITHUB_ENV"
+          docker build -t gluetun-egress-check:ci gateway
+
+      - name: Contrôler rules.nft
+        run: |
+          docker run --rm --cap-add NET_ADMIN --entrypoint sh gluetun-egress-check:ci -c '
+            set_elements() { [ -n "$1" ] || return 0; printf "elements = { %s }" "$(echo $1 | sed "s/ /, /g; s/:/ . /g")"; }
+            for ALLOW_IN in "" "172.30.20.10:4041"; do
+              for ALLOW_OUT in "" "172.30.20.20:6379"; do
+                sed -e "s|# @ALLOW_IN@|$(set_elements "$ALLOW_IN")|" -e "s|# @ALLOW_OUT@|$(set_elements "$ALLOW_OUT")|" \
+                  -e "s|# @NEXTHOPS6@|elements = { fd30:20::11, fd30:20::12 }|" /etc/gateway/rules.nft > /run/rules.nft
+                nft -c -D LAN=172.30.20.0/24 -D LAN6=fd30:20::/64 -D INGRESS=172.30.20.10 -D APP_PORT=8080 \
+                  -D NEXTHOPS="{ 172.30.20.11, 172.30.20.12 }" -f /run/rules.nft
+              done
+            done
+            echo ok'
+
+      - name: Publier
+        if: github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          echo "$GITHUB_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
+          case "$GITHUB_REF" in
+            refs/tags/v*)
+              version=${GITHUB_REF#refs/tags/v}
+              docker build -t "$IMAGE:$version" -t "$IMAGE:latest" --build-arg "VERSION=$version" --build-arg "SOURCE=https://github.com/$GITHUB_REPOSITORY" gateway
+              minor=${version%.*}
+              docker tag "$IMAGE:$version" "$IMAGE:$minor"
+              docker tag "$IMAGE:$version" "$IMAGE:${minor%.*}"
+              docker push --all-tags "$IMAGE"
+              ;;
+            *)
+              docker build -t "$IMAGE:edge" --build-arg "VERSION=edge-$GITHUB_SHA" --build-arg "SOURCE=https://github.com/$GITHUB_REPOSITORY" gateway
+              docker push "$IMAGE:edge"
+              ;;
+          esac
+          docker logout "$REGISTRY"

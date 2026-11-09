@@ -1,0 +1,4 @@
+# Images et paquets non épinglés : choix du projet (étiquettes flottantes).
+ignored:
+  - DL3007
+  - DL3018
