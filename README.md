@@ -20,6 +20,7 @@ Tout se règle par les variables du service `gateway` ; il n'y a rien d'autre à
 | **Appels de l'application vers le LAN** | `ALLOW_OUT` | Couples `ip:port` (un Redis, par exemple). Vide : rien n'est joignable. |
 | **Réseau** | `LAN_SUBNET` | Sous-réseau du réseau interne `vpn-gateway`. |
 | **Sondes** | `PROBE_URLS`, `PROBE_INTERVAL`, `PROBE_TIMEOUT`, `FAIL_THRESHOLD`, `RISE_THRESHOLD` | Détection de panne et de retour d'un VPN (valeurs par défaut au §4). |
+| **Qualité du serveur VPN** | `VPN_CHECK_*` (sur les Gluetun, pas sur le gateway) | Débit et latence d'un serveur, retest périodique, remplacement : câblage au §3.2.1, détail au §4.8. |
 
 Exemple minimal, deux VPN et un port d'application :
 
@@ -131,6 +132,8 @@ L'exemple ci-dessus est un exemple : l'ordre Nord, Proton, custom n'a de sens qu
 | `gateway/Dockerfile` | Alpine + `iproute2`, `nftables`, `curl`, `su-exec` |
 | `gateway/entrypoint.sh` | Firewall, tables de sonde, DNS, boucle de santé et de failover |
 | `gateway/rules.nft` | Firewall nftables du namespace gateway/app (ensembles `allow_in` et `allow_out`) |
+| `gateway/vpn-check.sh` | Sonde de santé des Gluetun (débit, latence, remplacement du serveur). Livrée dans l'image, déposée dans le volume `gateway-state` |
+| `gluetun/auth.toml` | Rôle du serveur de contrôle de Gluetun : changer de serveur, rien d'autre (utilisé par `vpn-check.sh`) |
 | `gluetun/post-rules-N.txt` | Forwarding + NAT gateway → `tun0` dans le Gluetun N (priorité N) |
 | `host/vpngw-firewall.sh`, `.service`, `vpngw.conf.example` | Service hôte : règle `DOCKER-USER` contre la fuite au démarrage d'un Gluetun (§4.6) |
 | `example/docker-compose.yml` | Une pile complète d'exemple : 3 Gluetun, 3 `wgentry` (wireproxy, un tunnel WireGuard vers le relais par Gluetun), Caddy, gateway, application |
@@ -216,6 +219,7 @@ cp .env.example .env && chmod 600 .env
 | `PROBE_TIMEOUT` | `4` | Timeout de chaque requête de sonde |
 | `FAIL_THRESHOLD` | `3` | Échecs consécutifs avant de déclarer un VPN mort |
 | `RISE_THRESHOLD` | `3` | Succès consécutifs avant de le réintégrer |
+| `VPN_CHECK_RECHECK_SECONDS` | `0` | Retest périodique du débit et de la latence d'un serveur VPN, en secondes (`0` : jamais, un serveur validé n'est retesté que si l'IP change). Ex. `1800`. Voir §3.2.1 |
 
 ### 3.2 `.env.vpnN`
 
@@ -259,6 +263,25 @@ utilise son propre DNS.
 type de filtre, avec des valeurs connues de Gluetun pour ce fournisseur (Gluetun refuse une ville ou
 un pays inconnu). Le serveur est tiré au hasard parmi ceux qui passent le filtre : un pays très
 fourni (Royaume-Uni) sortira plus souvent.
+
+### 3.2.1 Sonde de qualité des Gluetun (`vpn-check.sh`)
+
+Facultatif mais recommandé : il écarte les serveurs lents avant que la pile démarre, et, avec
+`VPN_CHECK_RECHECK_SECONDS`, ceux qui se dégradent ensuite. À faire pour **chaque** Gluetun, dans le `docker-compose.yml` :
+
+1. **Volume partagé** : déclarer `gateway-state` en volume racine, le monter dans le gateway sur `/run/gateway`, et dans
+   chaque Gluetun sur `/gateway-state` en lecture seule. Le gateway y dépose `vpn-check.sh` (livré dans son image) et la
+   liste des tunnels en vie. Aucun fichier à copier, aucun socket Docker.
+2. **Sonde de santé** du Gluetun : `healthcheck.test: ["CMD", "sh", "/gateway-state/vpn-check.sh"]`, avec
+   `interval: 30s`, `timeout: 60s`, `retries: 3`, `start_period: 4m`, `start_interval: 10s`.
+3. **Serveur de contrôle** : monter `gluetun/auth.toml` sur `/gluetun/auth/config.toml` et poser
+   `HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` (boucle locale uniquement, le rôle est sans authentification).
+4. **Nom du tunnel** : `VPN_CHECK_NAME=vpn1` sur le premier Gluetun de `VPN_IPS`, `vpn2` sur le deuxième, etc.
+   Requis pour le retest, inutile sans.
+5. **Retest** (facultatif) : `VPN_CHECK_RECHECK_SECONDS=1800` sur chaque Gluetun, ou dans le `.env` si le compose le
+   transmet comme celui de l'exemple.
+
+`example/docker-compose.yml` est câblé ainsi. Seuils, mémoire des IP recalées et garde-fou du dernier tunnel : §4.8.
 
 ### 3.3 Entrée : tunnels WireGuard vers un relais
 
@@ -567,10 +590,9 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_RECHECK_SECONDS` | `0` (jamais : un serveur validé n'est pas retesté tant que l'IP ne change pas) |
 | `VPN_CHECK_NAME` | `vpn1`, `vpn2`… : le nom du tunnel côté gateway (rang dans `VPN_IPS`), requis pour le retest |
 
-Câblage dans chaque service Gluetun : `vpn-check.sh` est livré **dans l'image du gateway**, qui le dépose à chaque
-démarrage dans le volume `gateway-state` ; monter ce volume en lecture seule sur `/gateway-state`, régler le
-`healthcheck` sur `["CMD", "sh", "/gateway-state/vpn-check.sh"]`, monter `auth.toml` sur
-`/gluetun/auth/config.toml`, et poser `HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` — ⚠️ le rôle est sans
+Câblage (pas à pas au §3.2.1) : `vpn-check.sh` est livré **dans l'image du gateway**, qui le dépose à chaque
+démarrage dans le volume `gateway-state` ; les Gluetun le montent en lecture seule, avec `auth.toml` sur
+`/gluetun/auth/config.toml` et `HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` — ⚠️ le rôle est sans
 authentification, le serveur de contrôle ne doit donc écouter que sur la boucle locale. `start_period: 4m` laisse
 le temps des remplacements : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé.
 ⚠️ `SERVER_NAMES` réduit à un seul serveur rend le remplacement inopérant.
