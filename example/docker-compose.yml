@@ -97,7 +97,8 @@ services:
       - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.13 }
-      vpn-gateway: { ipv4_address: 172.30.20.13 }
+      # IPv6 fixe même sans VPN IPv6 : sinon Docker attribue la première libre (fd30:20::2, celle du gateway).
+      vpn-gateway: { ipv4_address: 172.30.20.13, ipv6_address: "fd30:20::13" }
   wgentry1:
     <<: *wgentry
     network_mode: "service:gluetun1"
@@ -136,7 +137,7 @@ services:
       interval: 10s
     networks:
       frontend:    { ipv4_address: 172.30.10.10 }   # entrée depuis wgentry ; route par défaut de Caddy
-      vpn-gateway: { ipv4_address: 172.30.20.10 }   # accès direct L2 à l'application (172.30.20.2)
+      vpn-gateway: { ipv4_address: 172.30.20.10, ipv6_address: "fd30:20::10" }   # accès direct L2 à l'application (172.30.20.2)
     restart: unless-stopped
 
   # Le gateway ne monte pas le socket Docker : il parle à ce proxy, qui ne laisse passer que la relance des wgentry (README §7). Le
