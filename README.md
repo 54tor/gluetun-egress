@@ -211,6 +211,7 @@ cp .env.example .env && chmod 600 .env
 | `TZ` | `Europe/Paris` | Fuseau des Gluetun |
 | `APP_PORT` | `8080` | Port d'écoute de l'app (utilisé par Caddy et par le firewall du gateway) |
 | `PROBE_URLS` | `https://9.9.9.9/ https://8.8.8.8/` | Cibles des sondes, par IP (aucune dépendance DNS). Une seule réponse suffit, quel que soit le code HTTP |
+| `EGRESS_MODE` | `failover` | `failover` : le premier VPN en vie porte tout. `balance-dest` : répartition entre tous les VPN en vie, une destination gardant le même VPN (poser `EGRESS_HASH_POLICY=0`). `balance-flow` : répartition par connexion, l'IP de sortie varie d'une connexion à l'autre (`EGRESS_HASH_POLICY=1`). Un VPN mort est retiré de la route à `FAIL_THRESHOLD` ; ses connexions meurent. |
 | `PROBE_INTERVAL` | `5` | Secondes entre deux cycles de sondes |
 | `PROBE_TIMEOUT` | `4` | Timeout de chaque requête de sonde |
 | `FAIL_THRESHOLD` | `3` | Échecs consécutifs avant de déclarer un VPN mort |
@@ -340,7 +341,7 @@ Puis, en boucle toutes les `PROBE_INTERVAL` secondes :
   `joignable mais aucune sortie Internet via son tunnel`.
 - **Hystérésis** : un VPN passe *down* après `FAIL_THRESHOLD` échecs consécutifs et *up* après
   `RISE_THRESHOLD` succès consécutifs.
-- **Choix** : le premier VPN *up* dans l'ordre de `VPN_IPS` ; aucun → `unreachable`.
+- **Choix** : en `failover`, le premier VPN *up* dans l'ordre de `VPN_IPS` ; en `balance-*`, tous les VPN *up* en route multipath à poids égal (`/run/gateway/active` vaut alors `vpn1,vpn2`) ; aucun → `unreachable`.
 - La route est **ré-appliquée à chaque cycle** (auto-réparation si elle a été modifiée), l'état est
   écrit dans `/run/gateway/active` (`vpn1`, `vpn2`, `vpn3` ou `none`) et chaque changement est loggé
   (`sortie active -> …`).

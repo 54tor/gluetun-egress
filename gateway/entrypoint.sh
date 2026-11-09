@@ -1,5 +1,5 @@
 #!/bin/sh
-# Gateway de sortie : failover par priorité entre N Gluetun (VPN_IPS, le 1er est prioritaire), fail-closed.
+# Gateway de sortie : failover par priorité (ou répartition, EGRESS_MODE) entre N Gluetun (VPN_IPS), fail-closed.
 # L'application partage ce namespace (network_mode: service:gateway) : ses paquets sont
 # du trafic local routé par la table "main" dont ce script contrôle la route par défaut.
 set -eu
@@ -13,6 +13,9 @@ PROBE_URLS6=${PROBE_URLS6:-https://[2620:fe::fe]/ https://[2001:4860:4860::8888]
 # seulement si certains VPN n'ont pas d'IPv6). Vide : aucune sortie IPv6, la table nftables la refuse.
 VPN_IPS6=${VPN_IPS6:-}
 LAN_SUBNET6=${LAN_SUBNET6:-fc00::/7}
+# failover : un seul VPN porte la sortie (le premier en vie). balance-dest : répartition entre tous les VPN en vie,
+# une destination gardant le même VPN. balance-flow : répartition par connexion (l'IP de sortie varie d'une connexion à l'autre).
+EGRESS_MODE=${EGRESS_MODE:-failover}
 PROBE_INTERVAL=${PROBE_INTERVAL:-5}
 PROBE_TIMEOUT=${PROBE_TIMEOUT:-4}
 FAIL_THRESHOLD=${FAIL_THRESHOLD:-3}
@@ -23,6 +26,7 @@ DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
 
 # Ces valeurs finissent dans sed et nft : seuls les caractères d'une adresse ou d'un couple ip:port passent.
 check() { echo "$2" | grep -Eq "^[$3 ]*\$" || { echo "gateway: $1 contient des caractères invalides" >&2; exit 1; }; }
+case "$EGRESS_MODE" in failover|balance-dest|balance-flow) ;; *) echo "gateway: EGRESS_MODE doit valoir failover, balance-dest ou balance-flow" >&2; exit 1 ;; esac
 check ALLOW_IN "$ALLOW_IN" '0-9.:'
 check ALLOW_OUT "$ALLOW_OUT" '0-9.:'
 check VPN_IPS "$VPN_IPS" '0-9.'
@@ -72,6 +76,16 @@ sed -e "s|# @ALLOW_IN@|$(set_elements "$ALLOW_IN")|" -e "s|# @ALLOW_OUT@|$(set_e
 	/etc/gateway/rules.nft > /run/rules.nft
 nft -D LAN="$LAN_SUBNET" -D LAN6="$LAN_SUBNET6" -D INGRESS="$INGRESS_IP" -D APP_PORT="$APP_PORT" \
     -D NEXTHOPS="{ $(echo $VPN_IPS | sed 's/ /, /g') }" -f /run/rules.nft
+
+# Hash du multipath (0 = adresses source et destination, 1 = ports compris) : /proc/sys est en lecture seule ici, il se
+# pose par sysctls: du service (EGRESS_HASH_POLICY dans l'exemple). Sans effet en failover.
+if [ "$EGRESS_MODE" = balance-flow ]; then hash_policy=1; else hash_policy=0; fi
+if [ "$EGRESS_MODE" != failover ]; then
+	for f in $FAMILIES; do
+		[ "$(sysctl -n net.ipv$f.fib_multipath_hash_policy)" = "$hash_policy" ] \
+			|| echo "gateway: net.ipv$f.fib_multipath_hash_policy devrait valoir $hash_policy pour $EGRESS_MODE (sysctls: du service)" >&2
+	done
+fi
 
 # 2. Aucune sortie tant qu'aucun VPN n'est validé (par famille).
 for f in 4 6; do ipf $f route replace unreachable default 2>/dev/null || [ "$f" = 6 ]; done
@@ -141,8 +155,8 @@ while :; do
 	done
 
 	for f in $FAMILIES; do
-		# le premier VPN "up" dans l'ordre gagne, indépendamment pour chaque famille
-		want=none want_ip=
+		# failover : le premier VPN "up" dans l'ordre gagne ; balance-* : tous les VPN "up" ; par famille
+		want=none want_ips=
 		i=0
 		for ip in $(ips_of $f); do
 			i=$((i + 1))
@@ -157,20 +171,27 @@ while :; do
 				restart_dependents "$i" &
 			fi
 			eval "ok${f}_$i=$ok ko${f}_$i=$ko up${f}_$i=$up down${f}_$i=$down"
-			if [ "$up" = 1 ] && [ "$want" = none ]; then want=vpn$i want_ip=$ip; fi
+			if [ "$up" = 1 ] && { [ -z "$want_ips" ] || [ "$EGRESS_MODE" != failover ]; }; then
+				want_ips="$want_ips $ip"
+				if [ "$want" = none ]; then want=vpn$i; else want="$want,vpn$i"; fi
+			fi
 		done
 
 		# idempotent, rejoué à chaque cycle (auto-réparation si la route a été modifiée)
 		if [ "$want" = none ]; then
 			ipf $f route replace unreachable default
+		elif [ "$EGRESS_MODE" = failover ]; then
+			ipf $f route replace default via $want_ips dev eth0
 		else
-			ipf $f route replace default via "$want_ip" dev eth0
+			nexthops_args=
+			for ip in $want_ips; do nexthops_args="$nexthops_args nexthop via $ip dev eth0 weight 1"; done
+			ipf $f route replace default $nexthops_args
 		fi
 		eval "active=\$active$f"
 		if [ "$want" != "$active" ]; then
 			eval "active$f=$want"
 			echo "$want" > "/run/gateway/active$([ "$f" = 6 ] && echo 6)"
-			[ "$f" = 4 ] && [ "$want" != none ] && set_dns "$want_ip"
+			[ "$f" = 4 ] && [ "$want" != none ] && set_dns $want_ips
 			log "sortie IPv$f active -> $want"
 		fi
 	done

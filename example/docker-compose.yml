@@ -158,7 +158,11 @@ services:
       # rejetterait alors les réponses des sondes (routées par uid vers les tables 101/102).
       # Valeur effective = max(all, eth0) : all ici, eth0 via driver_opts du réseau (voir plus bas).
       net.ipv4.conf.all.rp_filter: "0"
+      # Répartition (EGRESS_MODE=balance-*) : 0 = par destination (balance-dest), 1 = par connexion (balance-flow).
+      net.ipv4.fib_multipath_hash_policy: ${EGRESS_HASH_POLICY:-0}
+      net.ipv6.fib_multipath_hash_policy: ${EGRESS_HASH_POLICY:-0}
     environment:
+      EGRESS_MODE: ${EGRESS_MODE:-failover}
       APP_PORT: ${APP_PORT}
       # Couples « ip:port » en plus de Caddy -> APP_PORT. Vides ici : l'application d'exemple n'en a pas besoin.
       ALLOW_IN: ""          # ex. "172.30.20.11:4041" : un second client du LAN qui appelle l'application
