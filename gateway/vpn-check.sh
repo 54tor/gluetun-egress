@@ -18,6 +18,18 @@ TUNNEL_NAME=${VPN_CHECK_NAME:-}
 GATEWAY_UP_FILE=/gateway-state/up
 # Une IP recalée est recalée d'office, sans test, pendant ce délai (0 : aucune mémoire).
 BAD_TTL_SECONDS=${VPN_CHECK_BAD_TTL_SECONDS:-86400}
+# http : un téléchargement de VPN_CHECK_BYTES. ookla : speedtest d'Ookla (latence et débit), lourd : voir le README.
+ENGINE=${VPN_CHECK_ENGINE:-http}
+# L'acceptation de la licence d'Ookla est un acte de l'utilisateur : sans « yes », le moteur ookla recale tout serveur.
+OOKLA_ACCEPT_LICENSE=${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-no}
+# Le CLI d'Ookla n'est pas dans l'image (binaire non redistribuable) : téléchargé une fois, par le tunnel validé, et gardé dans /tmp.
+OOKLA_VERSION=${VPN_CHECK_OOKLA_VERSION:-1.2.0}
+OOKLA_URL=${VPN_CHECK_OOKLA_URL:-https://install.speedtest.net/app/cli/ookla-speedtest-$OOKLA_VERSION-linux-x86_64.tgz}
+# Après un échec de téléchargement ou de contrôle, on ne retente qu'après ce délai (la mesure retombe sur http entre-temps).
+OOKLA_RETRY_SECONDS=${VPN_CHECK_OOKLA_RETRY_SECONDS:-3600}
+SPEEDTEST_DIR=/tmp/vpn-check-speedtest
+SPEEDTEST_BIN=$SPEEDTEST_DIR/speedtest
+SPEEDTEST_TIMEOUT_SECONDS=${VPN_CHECK_OOKLA_TIMEOUT:-50}
 
 STATE=/tmp/vpn-check
 BAD=$STATE.bad
@@ -96,19 +108,42 @@ reject() {
 
 ip_is_recently_bad && reject "déjà recalé il y a moins de ${BAD_TTL_SECONDS} s"
 
-t0=$(now_ms)
-wget -q -T 5 -O /dev/null https://9.9.9.9/ || reject "9.9.9.9 muet"
-latency=$(( $(now_ms) - t0 ))
-[ $latency -le "$MAX_LATENCY_MS" ] || reject "latence ${latency} ms > ${MAX_LATENCY_MS} ms"
+# Renseigne latency (ms) et mbps. Ookla : bandwidth est en octets par seconde, ping.latency en millisecondes.
+measure_with_http() {
+	t0=$(now_ms)
+	wget -q -T 5 -O /dev/null https://9.9.9.9/ || reject "9.9.9.9 muet"
+	latency=$(( $(now_ms) - t0 ))
+	[ $latency -le "$MAX_LATENCY_MS" ] || reject "latence ${latency} ms > ${MAX_LATENCY_MS} ms"
 
-for url in $URLS; do
-	wget -q -T 10 -O /dev/null "$url" || reject "$url muet"
-done
+	for url in $URLS; do
+		wget -q -T 10 -O /dev/null "$url" || reject "$url muet"
+	done
 
-t0=$(now_ms)
-wget -q -T 20 -O /dev/null "$SPEED_URL" || reject "téléchargement en échec"
-elapsed=$(( $(now_ms) - t0 + 1 ))
-mbps=$(( BYTES * 8 / elapsed / 1000 ))
+	t0=$(now_ms)
+	wget -q -T 20 -O /dev/null "$SPEED_URL" || reject "téléchargement en échec"
+	elapsed=$(( $(now_ms) - t0 + 1 ))
+	mbps=$(( BYTES * 8 / elapsed / 1000 ))
+}
+
+measure_with_ookla() {
+	[ "$OOKLA_ACCEPT_LICENSE" = yes ] || reject "licence Ookla non acceptée (VPN_CHECK_OOKLA_ACCEPT_LICENSE=yes)"
+	[ -x "$SPEEDTEST_BIN" ] || reject "binaire speedtest absent de /gateway-state"
+
+	wget -q -T 5 -O /dev/null https://9.9.9.9/ || reject "9.9.9.9 muet"
+	for url in $URLS; do
+		wget -q -T 10 -O /dev/null "$url" || reject "$url muet"
+	done
+
+	speedtest_json=$(timeout "$SPEEDTEST_TIMEOUT_SECONDS" "$SPEEDTEST_BIN" --accept-license --accept-gdpr -f json 2>/dev/null | tr -d '\n') \
+		|| reject "speedtest Ookla en échec"
+	latency=$(echo "$speedtest_json" | sed -n 's/.*"ping":{[^}]*"latency":\([0-9]*\).*/\1/p')
+	download_bytes_per_second=$(echo "$speedtest_json" | sed -n 's/.*"download":{"bandwidth":\([0-9]*\).*/\1/p')
+	[ -n "$latency" ] && [ -n "$download_bytes_per_second" ] || reject "sortie speedtest Ookla illisible"
+	mbps=$(( download_bytes_per_second * 8 / 1000000 ))
+	[ $latency -le "$MAX_LATENCY_MS" ] || reject "latence ${latency} ms > ${MAX_LATENCY_MS} ms"
+}
+
+if [ "$ENGINE" = ookla ]; then measure_with_ookla; else measure_with_http; fi
 [ $mbps -ge "$MIN_MBPS" ] || reject "débit ${mbps} Mbit/s < ${MIN_MBPS} Mbit/s"
 
 log "validé : ${latency} ms, ${mbps} Mbit/s"

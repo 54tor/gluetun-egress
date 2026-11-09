@@ -590,6 +590,12 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_BYTES` | `10485760` (taille exacte du fichier ci-dessus, base du calcul du débit) |
 | `VPN_CHECK_MAX_REROLLS` | `8` |
 | `VPN_CHECK_BAD_TTL_SECONDS` | `86400` (une IP recalée l'est d'office, sans test, pendant ce délai ; `0` : aucune mémoire) |
+| `VPN_CHECK_ENGINE` | `http` (téléchargement de `VPN_CHECK_BYTES`) ou `ookla` (speedtest d'Ookla : latence et débit, voir ci-dessous) |
+| `VPN_CHECK_OOKLA_ACCEPT_LICENSE` | `no`. Moteur `ookla` : `yes` pour accepter la licence d'Ookla, sinon tout serveur est recalé |
+| `VPN_CHECK_OOKLA_TIMEOUT` | `50` (secondes, sous le `timeout` du healthcheck) |
+| `VPN_CHECK_OOKLA_VERSION` | `1.2.0` (version attendue du CLI) |
+| `VPN_CHECK_OOKLA_URL` | `https://install.speedtest.net/app/cli/ookla-speedtest-<version>-linux-x86_64.tgz` (HTTPS obligatoire) |
+| `VPN_CHECK_OOKLA_RETRY_SECONDS` | `3600` (délai avant de retenter un téléchargement ou un contrôle en échec) |
 | `VPN_CHECK_RECHECK_SECONDS` | `0` (jamais : un serveur validé n'est pas retesté tant que l'IP ne change pas) |
 | `VPN_CHECK_NAME` | `vpn1`, `vpn2`… : le nom du tunnel côté gateway (rang dans `VPN_IPS`), requis pour le retest |
 
@@ -599,6 +605,18 @@ démarrage dans le volume `gateway-state` ; les Gluetun le montent en lecture se
 serveur de contrôle n'écoute que sur la boucle locale et refuse toute requête sans la clé. `start_period: 4m` laisse
 le temps des remplacements : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé.
 ⚠️ `SERVER_NAMES` réduit à un seul serveur rend le remplacement inopérant.
+
+**Moteur `ookla`.** Le CLI d'Ookla n'est **pas** dans l'image (binaire non redistribuable) : `vpn-check.sh` le télécharge une fois, par le tunnel qui vient d'être validé, dans `/tmp` du Gluetun (`VPN_CHECK_OOKLA_URL`, version `VPN_CHECK_OOKLA_VERSION`). Ookla ne publie pas de somme de contrôle : l'authenticité repose sur HTTPS (certificats vérifiés, aucune redirection suivie), et le fichier est refusé s'il échoue à l'un de ces contrôles : taille de 0,5 à 30 Mo, archive contenant `speedtest` sans chemin absolu ni `..`, en-tête ELF x86_64, `speedtest --version` annonçant la version attendue. Il s'exécute en root dans le Gluetun : l'URL de téléchargement est donc une frontière de confiance. Si le téléchargement ou un contrôle échoue, la mesure retombe sur le moteur `http` (une ligne dans les logs) et le téléchargement est retenté après `VPN_CHECK_OOKLA_RETRY_SECONDS`. Le Gluetun perd son binaire à sa recréation : il est alors retéléchargé. Avec `VPN_CHECK_ENGINE=ookla`, la latence et le débit viennent de son test
+(la joignabilité de `VPN_CHECK_URLS` reste testée). Trois points à savoir avant de l'activer :
+- **Licence :** le CLI se déclare réservé à un usage personnel et non commercial, sur un ordinateur personnel, et
+  n'est pas redistribuable. Le script ne passe `--accept-license` que si `VPN_CHECK_OOKLA_ACCEPT_LICENSE=yes`, c'est
+  donc ton acceptation.
+- **Volume :** le test n'a pas d'option pour borner les octets. Mesuré à 7 Go en 7,5 s sur une ligne très rapide ; sur un
+  tunnel à 100 Mbit/s, de l'ordre de la centaine de Mo par test et par tunnel, en téléchargement et en envoi. Avec le
+  retest, choisir `VPN_CHECK_RECHECK_SECONDS` en heures, pas en minutes.
+- **Durée :** 15 à 30 s par test, le tunnel est saturé pendant ce temps. À la connexion, jusqu'à
+  `VPN_CHECK_MAX_REROLLS` tests peuvent s'enchaîner : `start_period` peut devoir dépasser 4 minutes.
+Architecture : x86_64 seulement, sinon la mesure retombe sur `http`.
 
 **Retest périodique.** Avec `VPN_CHECK_RECHECK_SECONDS` > 0, un serveur validé est retesté (latence, débit) quand sa
 validation a plus de N secondes ; un serveur devenu lent est remplacé comme à la connexion, et le gateway retire le
