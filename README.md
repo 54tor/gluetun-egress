@@ -563,6 +563,7 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_SPEED_URL` | `https://proof.ovh.net/files/10Mb.dat` (fichier de taille fixe) |
 | `VPN_CHECK_BYTES` | `10485760` (taille exacte du fichier ci-dessus, base du calcul du débit) |
 | `VPN_CHECK_MAX_REROLLS` | `8` |
+| `VPN_CHECK_BAD_TTL_SECONDS` | `86400` (une IP recalée l'est d'office, sans test, pendant ce délai ; `0` : aucune mémoire) |
 | `VPN_CHECK_RECHECK_SECONDS` | `0` (jamais : un serveur validé n'est pas retesté tant que l'IP ne change pas) |
 | `VPN_CHECK_NAME` | `vpn1`, `vpn2`… : le nom du tunnel côté gateway (rang dans `VPN_IPS`), requis pour le retest |
 
@@ -578,7 +579,9 @@ tunnel de la route pendant le remplacement. **Garde-fou :** le gateway publie le
 `/run/gateway/up` (volume `gateway-state`, monté en lecture seule dans chaque Gluetun). `vpn-check.sh` ne retest un
 tunnel que si un *autre* tunnel est en vie : le dernier est gardé, même lent, plutôt que de couper la sortie. Sans
 fichier lisible ou sans `VPN_CHECK_NAME`, pas de retest. Le coût est d'environ `VPN_CHECK_BYTES` par tunnel et par
-période. Gluetun n'a pas de liste d'exclusion : un serveur recalé n'est pas mémorisé et peut être retiré à nouveau.
+période. Gluetun n'a pas de liste d'exclusion : `vpn-check.sh` mémorise lui-même les IP recalées (`/tmp/vpn-check.bad`, perdu à la
+recréation du conteneur) et les recale d'office pendant `VPN_CHECK_BAD_TTL_SECONDS`, ce qui évite de reprendre un serveur
+qui vient d'échouer ; l'expiration empêche qu'un filtre à peu de serveurs soit entièrement exclu.
 
 ## 5. Validation
 

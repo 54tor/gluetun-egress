@@ -16,8 +16,11 @@ SPEED_URL=${VPN_CHECK_SPEED_URL:-https://proof.ovh.net/files/10Mb.dat}
 RECHECK_SECONDS=${VPN_CHECK_RECHECK_SECONDS:-0}
 TUNNEL_NAME=${VPN_CHECK_NAME:-}
 GATEWAY_UP_FILE=/gateway-state/up
+# Une IP recalée est recalée d'office, sans test, pendant ce délai (0 : aucune mémoire).
+BAD_TTL_SECONDS=${VPN_CHECK_BAD_TTL_SECONDS:-86400}
 
 STATE=/tmp/vpn-check
+BAD=$STATE.bad
 PASSED=$STATE.passed
 PASSED_AT=$STATE.passed_at
 TRIES=$STATE.tries
@@ -53,7 +56,28 @@ now_ms() { awk '{ printf "%d", $1 * 1000 }' /proc/uptime; }
 
 log() { echo "$*"; echo "[vpn-check] $ip : $*" >/proc/1/fd/1; }
 
+ip_is_recently_bad() {
+	[ -f "$BAD" ] || return 1
+	now_seconds=$(date +%s)
+	while read -r bad_ip bad_at; do
+		[ "$bad_ip" = "$ip" ] && [ $(( now_seconds - bad_at )) -lt "$BAD_TTL_SECONDS" ] && return 0
+	done <"$BAD"
+	return 1
+}
+
+# Réécrit le fichier sans les entrées périmées ni celle de cette IP, puis y ajoute cette IP.
+remember_bad_ip() {
+	now_seconds=$(date +%s)
+	{
+		[ -f "$BAD" ] && while read -r bad_ip bad_at; do
+			[ "$bad_ip" != "$ip" ] && [ $(( now_seconds - bad_at )) -lt "$BAD_TTL_SECONDS" ] && echo "$bad_ip $bad_at"
+		done <"$BAD"
+		echo "$ip $now_seconds"
+	} >"$BAD.tmp" && mv "$BAD.tmp" "$BAD"
+}
+
 reject() {
+	remember_bad_ip
 	tries=$(( $(cat $TRIES 2>/dev/null || echo 0) + 1 ))
 	echo $tries >$TRIES
 	if [ $tries -gt "$MAX_REROLLS" ]; then
@@ -68,6 +92,8 @@ reject() {
 	done
 	exit 1
 }
+
+ip_is_recently_bad && reject "déjà recalé il y a moins de ${BAD_TTL_SECONDS} s"
 
 t0=$(now_ms)
 wget -q -T 5 -O /dev/null https://9.9.9.9/ || reject "9.9.9.9 muet"
