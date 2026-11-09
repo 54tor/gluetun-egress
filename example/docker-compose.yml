@@ -43,7 +43,8 @@ services:
     <<: *gluetun
     env_file: [.env.vpn1]             # VPN_SERVICE_PROVIDER, VPN_TYPE, clés/identifiants du fournisseur 1
     environment:
-      HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"
+      HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"   # boucle locale seulement : le rôle ci-dessous est sans authentification
+      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"none"}'   # vpn-check.sh change de serveur par PUT /v1/vpn/status
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
@@ -53,7 +54,6 @@ services:
     volumes:
       - gateway-state:/gateway-state:ro
       - ../gluetun/post-rules-1.txt:/iptables/post-rules.txt:ro
-      - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.11 }
       vpn-gateway: { ipv4_address: 172.30.20.11, ipv6_address: "fd30:20::11" }
@@ -62,7 +62,8 @@ services:
     <<: *gluetun
     env_file: [.env.vpn2]             # VPN_SERVICE_PROVIDER, VPN_TYPE, clés/identifiants du fournisseur 2
     environment:
-      HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"
+      HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"   # boucle locale seulement : le rôle ci-dessous est sans authentification
+      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"none"}'   # vpn-check.sh change de serveur par PUT /v1/vpn/status
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
@@ -72,7 +73,6 @@ services:
     volumes:
       - gateway-state:/gateway-state:ro
       - ../gluetun/post-rules-2.txt:/iptables/post-rules.txt:ro
-      - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.12 }
       vpn-gateway: { ipv4_address: 172.30.20.12, ipv6_address: "fd30:20::12" }
@@ -81,7 +81,8 @@ services:
     <<: *gluetun
     env_file: [.env.vpn3]             # VPN_SERVICE_PROVIDER, VPN_TYPE, clés/identifiants du fournisseur 3
     environment:
-      HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"
+      HTTP_CONTROL_SERVER_ADDRESS: "127.0.0.1:8000"   # boucle locale seulement : le rôle ci-dessous est sans authentification
+      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"none"}'   # vpn-check.sh change de serveur par PUT /v1/vpn/status
       VPN_INTERFACE: tun0               # même nom pour OpenVPN et WireGuard -> post-rules.txt stable
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
@@ -91,7 +92,6 @@ services:
     volumes:
       - gateway-state:/gateway-state:ro
       - ../gluetun/post-rules-3.txt:/iptables/post-rules.txt:ro
-      - ../gluetun/auth.toml:/gluetun/auth/config.toml:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.13 }
       # IPv6 fixe même sans VPN IPv6 : sinon Docker attribue la première libre (fd30:20::2, celle du gateway).

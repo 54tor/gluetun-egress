@@ -4,7 +4,7 @@
 # joignabilité à travers le tunnel. Un serveur recalé est remplacé (Gluetun en retire un au hasard dans
 # son filtre) jusqu'à VPN_CHECK_MAX_REROLLS fois ; au-delà, le conteneur reste unhealthy.
 #
-# Exige le serveur de contrôle sur 127.0.0.1:8000 et le rôle de gluetun/auth.toml.
+# Exige le serveur de contrôle sur 127.0.0.1:8000 et son rôle par défaut sans authentification (README §3.2.1).
 
 MIN_MBPS=${VPN_CHECK_MIN_MBPS:-20}
 MAX_LATENCY_MS=${VPN_CHECK_MAX_LATENCY_MS:-300}
