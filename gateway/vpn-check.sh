@@ -20,8 +20,8 @@ GATEWAY_UP_FILE=/gateway-state/up
 BAD_TTL_SECONDS=${VPN_CHECK_BAD_TTL_SECONDS:-86400}
 # ookla : speedtest d'Ookla (latence et débit), lourd : voir le README. http : un téléchargement de VPN_CHECK_BYTES.
 ENGINE=${VPN_CHECK_ENGINE:-ookla}
-# L'acceptation de la licence d'Ookla est un acte de l'utilisateur : sans « yes », la mesure retombe sur http.
-OOKLA_ACCEPT_LICENSE=${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-no}
+# « yes » accepte la licence d'Ookla (usage personnel et non commercial) ; « no » : la mesure retombe sur http.
+OOKLA_ACCEPT_LICENSE=${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
 # Le CLI d'Ookla n'est pas dans l'image (binaire non redistribuable) : téléchargé une fois, par le tunnel validé, et gardé dans /tmp.
 OOKLA_VERSION=${VPN_CHECK_OOKLA_VERSION:-1.2.0}
 OOKLA_URL=${VPN_CHECK_OOKLA_URL:-https://install.speedtest.net/app/cli/ookla-speedtest-$OOKLA_VERSION-linux-x86_64.tgz}
