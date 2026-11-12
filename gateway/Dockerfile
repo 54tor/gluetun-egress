@@ -14,6 +14,7 @@ COPY rules.nft /etc/gateway/rules.nft
 COPY vpn-check.sh /usr/local/share/gateway/vpn-check.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY watch-port-forward.sh /usr/local/bin/watch-port-forward.sh
+COPY probe-log.sh /usr/local/bin/probe-log.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/watch-port-forward.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

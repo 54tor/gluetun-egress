@@ -217,6 +217,7 @@ cp .env.example .env && chmod 600 .env
 | `PROBE_INTERVAL` | `5` | Secondes entre deux cycles de sondes |
 | `PROBE_TIMEOUT` | `4` | Timeout de chaque requête de sonde |
 | `FAIL_THRESHOLD` | `3` | Échecs consécutifs avant de déclarer un VPN mort |
+| `LOG_REMINDER` | `600` | Secondes entre deux rappels dans le journal d'un VPN qui reste hors service : le gateway journalise une ligne quand un VPN change d'état (hors service, revenu), pas une par sonde |
 | `RISE_THRESHOLD` | `3` | Succès consécutifs avant de le réintégrer |
 | `VPN_CHECK_APIKEY` | — | Clé d'API du serveur de contrôle de chaque Gluetun, présentée par `vpn-check.sh` pour changer de serveur. Obligatoire dans l'exemple. Voir §3.2.1 |
 | `VPN_CHECK_RECHECK_SECONDS` | `0` | Retest périodique du débit et de la latence d'un serveur VPN, en secondes (`0` : jamais, un serveur validé n'est retesté que si l'IP change). Ex. `1800`. Voir §3.2.1 |

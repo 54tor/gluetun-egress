@@ -52,6 +52,7 @@ ips_of() { if [ "$1" = 6 ]; then echo $VPN_IPS6; else echo $VPN_IPS; fi; }
 ipf() { f=$1; shift; if [ "$f" = 6 ]; then ip -6 "$@"; else ip "$@"; fi; }
 
 log() { echo "$(date -Iseconds) gateway: $*"; }
+. /usr/local/bin/probe-log.sh
 
 restart_dependents() { # $1=n° du VPN revenu après une panne
 	eval "names=\${RESTART_DEPENDENTS_$1:-}"
@@ -118,6 +119,9 @@ set_dns() { { for n in "$@"; do echo "nameserver $n"; done; echo "options timeou
 set_dns $VPN_IPS
 
 mkdir -p /run/gateway
+# La raison du dernier échec de chaque sonde : la sonde l'écrit, la boucle principale décide s'il faut la journaliser.
+raisons_des_sondes=/run/probe-reasons
+mkdir -p "$raisons_des_sondes"
 # vpn-check.sh : la sonde de santé des Gluetun, livrée avec l'image et déposée dans le volume partagé à chaque
 # démarrage (mv : un Gluetun ne lit jamais un fichier à moitié écrit).
 cp /usr/local/share/gateway/vpn-check.sh /run/gateway/.vpn-check.sh.tmp
@@ -134,11 +138,11 @@ probe() { # $1=uid $2=ip gluetun $3=nom $4=famille -> 0 si Internet joignable à
 		[ "$rc" = 0 ] && return 0
 	done
 	if ! ping $pingopt -c1 -W1 "$2" >/dev/null 2>&1; then
-		log "$3 IPv$4 ($2) injoignable (conteneur arrêté ou réseau vpn-gateway)"
+		echo "injoignable (conteneur arrêté ou réseau vpn-gateway)" > "$raisons_des_sondes/$3-v$4"
 	elif [ "$rc" = 28 ]; then
-		log "$3 IPv$4 ($2) joignable mais tunnel trop lent (aucune réponse en ${PROBE_TIMEOUT}s)"
+		echo "joignable mais tunnel trop lent (aucune réponse en ${PROBE_TIMEOUT}s)" > "$raisons_des_sondes/$3-v$4"
 	else
-		log "$3 IPv$4 ($2) joignable mais aucune sortie Internet via son tunnel"
+		echo "joignable mais aucune sortie Internet via son tunnel" > "$raisons_des_sondes/$3-v$4"
 	fi
 	return 1
 }
@@ -189,6 +193,7 @@ while :; do
 			[ "$ok" -ge "$RISE_THRESHOLD" ] && up=1
 			[ "$ko" -ge "$FAIL_THRESHOLD" ] && up=0
 			[ "$was_up" = 1 ] && [ "$up" = 0 ] && down=1
+			journaliser_etat_sonde "vpn$i" "$f" "$ip" "$was_up" "$up" "$ko" "$(cat "$raisons_des_sondes/vpn$i-v$f" 2>/dev/null)" "$(date +%s)"
 			if [ "$f" = 4 ] && [ "$was_up" = 0 ] && [ "$up" = 1 ] && [ "$down" = 1 ]; then
 				down=0
 				restart_dependents "$i" &
