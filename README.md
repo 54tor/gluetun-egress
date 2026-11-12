@@ -420,8 +420,8 @@ Contenu (exemple gluetun1, `.11` ; `.12` et `.13` pour les autres) :
 | Règle | Effet |
 |---|---|
 | `-P FORWARD DROP` | Réaffirme la politique |
-| `-I INPUT -i eth+ -d 172.30.20.11 ! -s 172.30.20.2 -j DROP` | Seul le gateway peut joindre ce Gluetun sur `vpn-gateway` |
-| `-I OUTPUT -d 172.30.10.10 -p tcp -m owner ! --uid-owner 65532 -j DROP` | Seul `wgentry` (uid 65532, `nonroot` de son image) joint le proxy d'entrée, **sur tous ses ports** |
+| `-I INPUT -i eth+ -d 172.30.20.11 -j gateway-seul`, la chaîne portant `! -s 172.30.20.2 -j DROP` | Seul le gateway peut joindre ce Gluetun sur `vpn-gateway` |
+| `-I OUTPUT -d 172.30.10.10 -p tcp -j proxy-owner`, la chaîne portant `-m owner ! --uid-owner 65532 -j DROP` | Seul `wgentry` (uid 65532, `nonroot` de son image) joint le proxy d'entrée, **sur tous ses ports** |
 | `-A FORWARD -i eth+ -s 172.30.20.2 -o tun0 -j ACCEPT` | Forward gateway → tunnel **uniquement** |
 | `-A FORWARD -i tun0 -o eth+ -d 172.30.20.2 … ESTABLISHED,RELATED` | Retour |
 | `-t nat -A POSTROUTING -s 172.30.20.2 -o tun0 -j MASQUERADE` | NAT vers le tunnel |

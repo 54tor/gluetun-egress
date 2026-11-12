@@ -1,6 +1,12 @@
 iptables -P FORWARD DROP
-iptables -I INPUT -i eth+ -d 172.30.20.11/32 ! -s 172.30.20.2/32 -j DROP
-iptables -I OUTPUT -d 172.30.10.10/32 -p tcp -m owner ! --uid-owner 65532 -j DROP
+# Chaînes dédiées : Gluetun relit INPUT et OUTPUT (arrêt de sa redirection de port, découverte de MTU) et ne sait lire ni « ! »,
+# ni « owner », ni « multiport » ; ces règles vivent donc dans une chaîne, et INPUT/OUTPUT n'y sautent que par un renvoi simple.
+iptables -N gateway-seul
+iptables -A gateway-seul ! -s 172.30.20.2/32 -j DROP
+iptables -I INPUT -i eth+ -d 172.30.20.11/32 -j gateway-seul
+iptables -N proxy-owner
+iptables -A proxy-owner -m owner ! --uid-owner 65532 -j DROP
+iptables -I OUTPUT -d 172.30.10.10/32 -p tcp -j proxy-owner
 iptables -A FORWARD -i eth+ -s 172.30.20.2/32 -o tun0 -j ACCEPT
 iptables -A FORWARD -i tun0 -o eth+ -d 172.30.20.2/32 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -t nat -A POSTROUTING -s 172.30.20.2/32 -o tun0 -j MASQUERADE
@@ -13,7 +19,9 @@ ip6tables -A nd -p icmpv6 --icmpv6-type neighbour-solicitation -j ACCEPT
 ip6tables -A nd -p icmpv6 --icmpv6-type neighbour-advertisement -j ACCEPT
 ip6tables -I INPUT -i eth+ -j nd
 ip6tables -I OUTPUT -o eth+ -j nd
-ip6tables -I INPUT -i eth+ -d fd30:20::11/128 ! -s fd30:20::2/128 -j DROP
+ip6tables -N gateway-seul
+ip6tables -A gateway-seul ! -s fd30:20::2/128 -j DROP
+ip6tables -I INPUT -i eth+ -d fd30:20::11/128 -j gateway-seul
 ip6tables -A FORWARD -i eth+ -s fd30:20::2/128 -o tun0 -j ACCEPT
 ip6tables -A FORWARD -i tun0 -o eth+ -d fd30:20::2/128 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 ip6tables -t nat -A POSTROUTING -s fd30:20::2/128 -o tun0 -j MASQUERADE

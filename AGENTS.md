@@ -42,6 +42,7 @@ docker build -t gluetun-egress-check gateway
 (cd example && docker compose config -q)
 sh gateway/tests/watch-port-forward/run.sh
 sh gateway/tests/probe-log/run.sh
+sh gluetun/tests/post-rules/run.sh
 ```
 
 La syntaxe de `rules.nft` se contrôle dans l'image, avec `nft -c` et des `ALLOW_IN` / `ALLOW_OUT` vides puis
