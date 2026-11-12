@@ -797,6 +797,14 @@ Rappel : le 4ᵉ `nameserver` sera ignoré par les resolvers (limite de 3).
   socket Docker monté, il relance ces conteneurs quand le Gluetun n repasse *up* après avoir été *down*
   (jamais au premier démarrage). Le gateway ne monte pas le socket Docker : il parle à un `socket-proxy` (`wollomatic/socket-proxy`) qui n'autorise que `POST …/restart` sur les conteneurs `wgentryN` (regex `allowPOST` du compose, à élargir pour un autre conteneur à relancer), par un socket Unix dans un volume que seul le gateway monte (l'application partage son réseau mais pas son système de fichiers). Le proxy monte, lui, le vrai socket en lecture seule, sans capacité, système de fichiers en lecture seule : un conteneur de plus à surveiller, mais une surface bien plus petite que le gateway entier. La surveillance du port redirigé (`PORT_FORWARD_<n>`) a besoin de plus : `GET …/json` et `GET …/archive` sur le Gluetun, et `POST …/restart` sur lui ; l'exemple ne les ouvre pas. Pour les ouvrir, ajouter `gluetun` à la regex `allowPOST` (`vpnstack-(gluetun|wgentry)[0-9]+-1`) et une ligne `-allowGET=^(/v[0-9.]+)?/containers/vpnstack-gluetun[0-9]+-1/(json|archive)$$` (`$$` dans un compose). Limites de ces deux lignes : `json` renvoie l'environnement du conteneur, clés WireGuard et clé d'API du Gluetun comprises, et `archive` ne filtre pas le chemin lu : un proxy détourné lirait ces secrets. Un Gluetun relancé en moins de `FAIL_THRESHOLD × PROBE_INTERVAL`
   secondes n'est pas vu comme *down* : sa relance n'est alors pas détectée.
+- **Surveillance du port redirigé** : avec `PORT_FORWARD_<n>` (nom du conteneur du Gluetun n) et le socket Docker monté,
+  le gateway lance `watch-port-forward.sh` pour ce Gluetun : si `/gluetun/forwarded_port` manque `PF_MISS_LIMIT` contrôles
+  de suite (défaut 6, un toutes les `PF_CHECK_EVERY` secondes, défaut 30), le Gluetun est relancé (il change de serveur, et
+  la redirection revient presque toujours : sa demande NAT-PMP peut expirer au démarrage sans jamais être renouvelée), puis,
+  `PF_DEPENDENTS_DELAY` secondes après (défaut 5), les conteneurs de `RESTART_DEPENDENTS_<n>`. Cette relance-là est faite par
+  le script lui-même : un redémarrage rapide n'est pas vu comme *down* par le gateway. Un conteneur arrêté n'est jamais relancé.
+  `PORT_FORWARD_FILE` change le fichier lu. Test, sans conteneur ni vrai socket : `sh gateway/tests/watch-port-forward/run.sh`
+  (faux démon Docker en Python, `python3` requis ; environ 25 s).
 - **Si le gateway redémarre hors de Compose** (politique `restart` du conteneur, `docker restart`),
   l'app reste accrochée à l'ancien namespace, sans aucune interface : **elle n'a plus de réseau du
   tout** (fail-closed, pas de fuite) jusqu'à `docker compose up -d --force-recreate app`.

@@ -22,7 +22,10 @@ FAIL_THRESHOLD=${FAIL_THRESHOLD:-3}
 RISE_THRESHOLD=${RISE_THRESHOLD:-3}
 # Facultatif : RESTART_DEPENDENTS_<n> liste les conteneurs en network_mode service:<Gluetun n> à relancer quand ce
 # Gluetun revient après une panne (ils restent « Up » sans réseau s'il a redémarré hors de Compose). Exige le socket.
+# Facultatif : PORT_FORWARD_<n> nomme le conteneur du Gluetun n dont le port redirigé (NAT-PMP) est surveillé : absent
+# PF_MISS_LIMIT contrôles de suite, il est relancé avec les conteneurs de RESTART_DEPENDENTS_<n> (watch-port-forward.sh). Exige le socket.
 DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
+export DOCKER_SOCKET
 
 # Ces valeurs finissent dans sed et nft : seuls les caractères d'une adresse ou d'un couple ip:port passent.
 # `case` et non grep : grep valide ligne par ligne, une valeur sur plusieurs lignes passerait.
@@ -148,7 +151,20 @@ done
 # /run/gateway/up : tous les VPN « up » en IPv4 (vpn1 vpn2…), lu par vpn-check.sh pour ne jamais recycler le dernier.
 : > /run/gateway/up
 
-trap 'log "arrêt"; exit 0' TERM INT
+# Surveillance du port redirigé : un processus par Gluetun qui en a un (PORT_FORWARD_<n>), arrêté avec le gateway.
+surveillances=""
+i=0
+for ip in $VPN_IPS; do
+	i=$((i + 1))
+	eval "gluetun_surveille=\${PORT_FORWARD_$i:-}"
+	[ -n "$gluetun_surveille" ] || continue
+	[ -S "$DOCKER_SOCKET" ] || { log "socket Docker absent : port redirigé de $gluetun_surveille non surveillé"; continue; }
+	eval "dependants=\${RESTART_DEPENDENTS_$i:-}"
+	sh /usr/local/bin/watch-port-forward.sh "$gluetun_surveille" $dependants &
+	surveillances="$surveillances $!"
+done
+
+trap 'log "arrêt"; [ -z "$surveillances" ] || kill $surveillances 2>/dev/null; exit 0' TERM INT
 
 while :; do
 	# sondes en parallèle, familles comprises : la détection d'un VPN ne dépend pas des timeouts des autres
