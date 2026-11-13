@@ -201,7 +201,7 @@ if [ "$ENGINE" = ookla ]; then measure_with_ookla; else measure_with_http; fi
 
 log "validé : ${latency} ms, ${mbps} Mbit/s"
 # Mesure lue par le gateway (tunnels.json) dans le volume propre à ce tunnel ; sans ce volume, l'écriture échoue sans conséquence.
-{ echo "$latency $mbps $(date +%s) $ip" >"$MEASURE_FILE"; } 2>/dev/null || true
+{ echo "$latency $mbps $(date +%s) $ip" >"$MEASURE_FILE.tmp" && mv "$MEASURE_FILE.tmp" "$MEASURE_FILE"; } 2>/dev/null || true
 echo "$ip" >$PASSED
 date +%s >$PASSED_AT
 rm -f $TRIES
