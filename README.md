@@ -629,6 +629,8 @@ période. Gluetun n'a pas de liste d'exclusion : `vpn-check.sh` mémorise lui-m�
 recréation du conteneur) et les recale d'office pendant `VPN_CHECK_BAD_TTL_SECONDS`, ce qui évite de reprendre un serveur
 qui vient d'échouer ; l'expiration empêche qu'un filtre à peu de serveurs soit entièrement exclu.
 
+**État des tunnels.** Le gateway écrit `/run/gateway/tunnels.json` à chaque cycle (`{"written_at", "tunnels": [{"name", "up", "public_ip", "latency_ms", "down_mbps", "measured_at"}]}`, les quatre derniers champs à `null` sans mesure). `vpn-check.sh` dépose la dernière mesure d'un tunnel validé dans `/gateway-state/measure-<VPN_CHECK_NAME>` (`latence_ms débit_mbit date ip_publique`) : `gateway-state` est le même volume que `/run/gateway` côté gateway, mais ⚠️ l'exemple le monte en lecture seule dans les Gluetun : sans montage en écriture de ce volume, aucune mesure n'est écrite et ces champs restent `null`.
+
 ## 5. Validation
 
 **Le pare-feu seul, sans pile.** Contrôler la syntaxe de `rules.nft` avec des ensembles vides puis remplis

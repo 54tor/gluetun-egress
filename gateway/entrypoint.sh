@@ -53,6 +53,7 @@ ipf() { f=$1; shift; if [ "$f" = 6 ]; then ip -6 "$@"; else ip "$@"; fi; }
 
 log() { echo "$(date -Iseconds) gateway: $*"; }
 . /usr/local/bin/probe-log.sh
+. /usr/local/bin/tunnels-json.sh
 
 restart_dependents() { # $1=n° du VPN revenu après une panne
 	eval "names=\${RESTART_DEPENDENTS_$1:-}"
@@ -183,7 +184,7 @@ while :; do
 
 	for f in $FAMILIES; do
 		# failover : le premier VPN "up" dans l'ordre gagne ; balance-* : tous les VPN "up" ; par famille
-		want=none want_ips= up_names=
+		want=none want_ips= up_names= etats_des_tunnels=
 		i=0
 		for ip in $(ips_of $f); do
 			i=$((i + 1))
@@ -200,6 +201,7 @@ while :; do
 			fi
 			eval "ok${f}_$i=$ok ko${f}_$i=$ko up${f}_$i=$up down${f}_$i=$down"
 			[ "$up" = 1 ] && up_names="$up_names vpn$i"
+			etats_des_tunnels="$etats_des_tunnels vpn$i:$up"
 			if [ "$up" = 1 ] && { [ -z "$want_ips" ] || [ "$EGRESS_MODE" != failover ]; }; then
 				want_ips="$want_ips $ip"
 				if [ "$want" = none ]; then want=vpn$i; else want="$want,vpn$i"; fi
@@ -207,6 +209,7 @@ while :; do
 		done
 
 		[ "$f" = 4 ] && echo "$up_names" > /run/gateway/up
+		[ "$f" = 4 ] && ecrire_etat_tunnels /run/gateway/tunnels.json /run/gateway "$etats_des_tunnels" "$(date +%s)"
 		# idempotent, rejoué à chaque cycle (auto-réparation si la route a été modifiée)
 		if [ "$want" = none ]; then
 			ipf $f route replace unreachable default
