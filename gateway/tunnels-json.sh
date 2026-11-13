@@ -28,6 +28,8 @@ ecrire_etat_tunnels() {
 	fichier_temporaire="$fichier_tunnels.tmp"
 	separateur=
 
+	# Un échec d'écriture ne doit jamais arrêter l'appelant (set -e) : on rend 1, il journalise.
+	{ printf '' > "$fichier_temporaire"; } 2>/dev/null || return 1
 	printf '{"written_at":%s,"tunnels":[' "$date_ecriture" > "$fichier_temporaire"
 	for etat_du_tunnel in $etats_des_tunnels; do
 		nom_du_tunnel=${etat_du_tunnel%%:*}
@@ -42,5 +44,5 @@ ecrire_etat_tunnels() {
 		separateur=,
 	done
 	printf ']}\n' >> "$fichier_temporaire"
-	mv "$fichier_temporaire" "$fichier_tunnels"
+	mv "$fichier_temporaire" "$fichier_tunnels" 2>/dev/null || return 1
 }

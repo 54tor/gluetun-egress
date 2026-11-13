@@ -38,4 +38,12 @@ verifier "vpn1-date-mesure" 1700000000 "$(jq '.tunnels[] | select(.name == "vpn1
 verifier "vpn1-ip" '"203.0.113.7"' "$(jq '.tunnels[] | select(.name == "vpn1") | .public_ip' "$fichier_tunnels")"
 verifier "aucun-temporaire" 1 "$(find "$dossier_de_travail" -maxdepth 1 -name '*tunnels.json*' | wc -l | tr -d ' ')"
 
+# Dossier d'écriture inutilisable : la fonction rend un code non nul, et l'appelant sous set -eu survit.
+sortie=$(
+	set -eu
+	ecrire_etat_tunnels "$dossier_de_travail/absent/tunnels.json" "$dossier_de_travail" "vpn1:1" 1700000200 || echo "echec-signale"
+	echo "appelant-vivant"
+)
+verifier "ecriture-impossible-sans-abandon" "echec-signale appelant-vivant" "$(echo $sortie)"
+
 [ "$nombre_echecs" = 0 ]

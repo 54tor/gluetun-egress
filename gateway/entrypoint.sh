@@ -209,7 +209,9 @@ while :; do
 		done
 
 		[ "$f" = 4 ] && echo "$up_names" > /run/gateway/up
-		[ "$f" = 4 ] && ecrire_etat_tunnels /run/gateway/tunnels.json /run/gateway "$etats_des_tunnels" "$(date +%s)"
+		if [ "$f" = 4 ]; then
+			ecrire_etat_tunnels /run/gateway/tunnels.json /run/gateway "$etats_des_tunnels" "$(date +%s)" || log "tunnels.json non écrit"
+		fi
 		# idempotent, rejoué à chaque cycle (auto-réparation si la route a été modifiée)
 		if [ "$want" = none ]; then
 			ipf $f route replace unreachable default
