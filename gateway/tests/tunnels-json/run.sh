@@ -46,6 +46,25 @@ ecrire_etat_tunnels "$fichier_tunnels" "$dossier_de_travail" "vpn4:1" 1700000300
 verifier "mesure-lien-symbolique-latence-null" null "$(jq '.tunnels[0].latency_ms' "$fichier_tunnels")"
 verifier "mesure-lien-symbolique-ip-null" null "$(jq '.tunnels[0].public_ip' "$fichier_tunnels")"
 
+# Ligne de mesure démesurée (1 Mio sans retour à la ligne) : refusée, champs à null
+mkdir -p "$dossier_de_travail/vpn5"
+head -c 1048576 /dev/zero | tr '\0' '1' > "$dossier_de_travail/vpn5/measure"
+ecrire_etat_tunnels "$fichier_tunnels" "$dossier_de_travail" "vpn5:1" 1700000400
+verifier "ligne-demesuree-latence-null" null "$(jq '.tunnels[0].latency_ms' "$fichier_tunnels")"
+
+# Mesure devenue un tube sans écrivain : la lecture ne doit pas bloquer. Le contrôle -f la refuse déjà ; on appelle donc
+# directement la lecture bornée, sous un garde-fou du test lui-même (timeout 10).
+mkdir -p "$dossier_de_travail/vpn6"
+mkfifo "$dossier_de_travail/vpn6/measure"
+debut_lecture=$(date +%s)
+ligne_obtenue=$(timeout 10 sh -c '. "$1"; lire_ligne_de_mesure "$2"' sh "$dossier_du_test/../../tunnels-json.sh" "$dossier_de_travail/vpn6/measure")
+duree_lecture=$(( $(date +%s) - debut_lecture ))
+verifier "tube-sans-ecrivain-ligne-vide" "" "$ligne_obtenue"
+[ "$duree_lecture" -le 4 ] && lecture_bornee=oui || lecture_bornee=non
+verifier "tube-sans-ecrivain-lecture-bornee" oui "$lecture_bornee"
+ecrire_etat_tunnels "$fichier_tunnels" "$dossier_de_travail" "vpn6:1" 1700000500
+verifier "tube-champs-null" null "$(jq '.tunnels[0].latency_ms' "$fichier_tunnels")"
+
 # Dossier d'écriture inutilisable : la fonction rend un code non nul, et l'appelant sous set -eu survit.
 sortie=$(
 	set -eu

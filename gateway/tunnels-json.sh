@@ -20,6 +20,14 @@ json_adresse_ou_null() {
 	esac
 }
 
+# Lit la première ligne, 255 octets au plus, hors du shell principal et sous délai : un fichier remplacé par un tube
+# entre le contrôle et la lecture ne bloque pas la boucle de sonde. Une ligne de 256 octets ou plus est refusée.
+lire_ligne_de_mesure() {
+	ligne_lue=$(timeout 2 head -c 256 -- "$1" 2>/dev/null | head -n 1) || return 0
+	[ "${#ligne_lue}" -lt 256 ] && printf '%s' "$ligne_lue"
+	return 0
+}
+
 # ecrire_etat_tunnels <fichier> <dossier des mesures> "<tunnel>:<1 si up, 0 sinon> ..." <maintenant, en secondes>
 ecrire_etat_tunnels() {
 	fichier_tunnels="$1"
@@ -37,7 +45,13 @@ ecrire_etat_tunnels() {
 		[ "${etat_du_tunnel##*:}" = 1 ] && est_up=true || est_up=false
 		latence_ms= debit_mbit= date_mesure= ip_publique=
 		fichier_de_mesure="$dossier_des_mesures/$nom_du_tunnel/measure"
-		[ -f "$fichier_de_mesure" ] && [ ! -L "$fichier_de_mesure" ] && [ -r "$fichier_de_mesure" ] && read -r latence_ms debit_mbit date_mesure ip_publique < "$fichier_de_mesure"
+		ligne_de_mesure=
+		if [ -f "$fichier_de_mesure" ] && [ ! -L "$fichier_de_mesure" ]; then
+			ligne_de_mesure=$(lire_ligne_de_mesure "$fichier_de_mesure")
+		fi
+		read -r latence_ms debit_mbit date_mesure ip_publique <<EOF_MESURE
+$ligne_de_mesure
+EOF_MESURE
 		printf '%s{"name":"%s","up":%s,"public_ip":%s,"latency_ms":%s,"down_mbps":%s,"measured_at":%s}' \
 			"$separateur" "$nom_du_tunnel" "$est_up" "$(json_adresse_ou_null "$ip_publique")" \
 			"$(json_nombre_ou_null "$latence_ms")" "$(json_nombre_ou_null "$debit_mbit")" \
