@@ -16,7 +16,7 @@ SPEED_URL=${VPN_CHECK_SPEED_URL:-https://proof.ovh.net/files/10Mb.dat}
 RECHECK_SECONDS=${VPN_CHECK_RECHECK_SECONDS:-0}
 TUNNEL_NAME=${VPN_CHECK_NAME:-}
 GATEWAY_UP_FILE=/gateway-state/up
-MEASURE_DIRECTORY=/gateway-state
+MEASURE_FILE=/gateway-measure/measure
 # Une IP recalée est recalée d'office, sans test, pendant ce délai (0 : aucune mémoire).
 BAD_TTL_SECONDS=${VPN_CHECK_BAD_TTL_SECONDS:-86400}
 # ookla : speedtest d'Ookla (latence et débit), lourd : voir le README. http : un téléchargement de VPN_CHECK_BYTES.
@@ -200,8 +200,8 @@ if [ "$ENGINE" = ookla ]; then measure_with_ookla; else measure_with_http; fi
 [ $mbps -ge "$MIN_MBPS" ] || reject "débit ${mbps} Mbit/s < ${MIN_MBPS} Mbit/s"
 
 log "validé : ${latency} ms, ${mbps} Mbit/s"
-# Mesure lue par le gateway (tunnels.json). Le volume est monté en lecture seule dans l'exemple : l'écriture échoue alors sans conséquence.
-[ -z "$TUNNEL_NAME" ] || { echo "$latency $mbps $(date +%s) $ip" >"$MEASURE_DIRECTORY/measure-$TUNNEL_NAME"; } 2>/dev/null || true
+# Mesure lue par le gateway (tunnels.json) dans le volume propre à ce tunnel ; sans ce volume, l'écriture échoue sans conséquence.
+{ echo "$latency $mbps $(date +%s) $ip" >"$MEASURE_FILE"; } 2>/dev/null || true
 echo "$ip" >$PASSED
 date +%s >$PASSED_AT
 rm -f $TRIES

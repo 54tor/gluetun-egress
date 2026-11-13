@@ -271,7 +271,7 @@ Facultatif mais recommandé : il écarte les serveurs lents avant que la pile d�
 `VPN_CHECK_RECHECK_SECONDS`, ceux qui se dégradent ensuite. À faire pour **chaque** Gluetun, dans le `docker-compose.yml` :
 
 1. **Volume partagé** : déclarer `gateway-state` en volume racine, le monter dans le gateway sur `/run/gateway`, et dans
-   chaque Gluetun sur `/gateway-state` (en écriture : `vpn-check.sh` y dépose ses mesures). Le gateway y dépose `vpn-check.sh` (livré dans son image) et la
+   chaque Gluetun sur `/gateway-state` en lecture seule, plus son propre volume de mesure `measure-vpnN` sur `/gateway-measure` (seul dossier où il écrit). Le gateway y dépose `vpn-check.sh` (livré dans son image) et la
    liste des tunnels en vie. Aucun fichier à copier, aucun socket Docker.
 2. **Sonde de santé** du Gluetun : `healthcheck.test: ["CMD", "sh", "/gateway-state/vpn-check.sh"]`, avec
    `interval: 30s`, `timeout: 60s`, `retries: 3`, `start_period: 4m`, `start_interval: 10s`.
@@ -601,7 +601,7 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_NAME` | `vpn1`, `vpn2`… : le nom du tunnel côté gateway (rang dans `VPN_IPS`), requis pour le retest |
 
 Câblage (pas à pas au §3.2.1) : `vpn-check.sh` est livré **dans l'image du gateway**, qui le dépose à chaque
-démarrage dans le volume `gateway-state` ; les Gluetun le montent (en écriture, pour les mesures), avec
+démarrage dans le volume `gateway-state` ; les Gluetun le montent en lecture seule, avec
 `HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000` et une clé d'API (`HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE`, §3.2.1) : le
 serveur de contrôle n'écoute que sur la boucle locale et refuse toute requête sans la clé. `start_period: 4m` laisse
 le temps des remplacements : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé.
@@ -622,14 +622,14 @@ Architecture : x86_64 seulement, sinon la mesure retombe sur `http`.
 **Retest périodique.** Avec `VPN_CHECK_RECHECK_SECONDS` > 0, un serveur validé est retesté (latence, débit) quand sa
 validation a plus de N secondes ; un serveur devenu lent est remplacé comme à la connexion, et le gateway retire le
 tunnel de la route pendant le remplacement. **Garde-fou :** le gateway publie les tunnels en vie dans
-`/run/gateway/up` (volume `gateway-state`, monté dans chaque Gluetun). `vpn-check.sh` ne retest un
+`/run/gateway/up` (volume `gateway-state`, monté en lecture seule dans chaque Gluetun). `vpn-check.sh` ne retest un
 tunnel que si un *autre* tunnel est en vie : le dernier est gardé, même lent, plutôt que de couper la sortie. Sans
 fichier lisible ou sans `VPN_CHECK_NAME`, pas de retest. Le coût est d'environ `VPN_CHECK_BYTES` par tunnel et par
 période. Gluetun n'a pas de liste d'exclusion : `vpn-check.sh` mémorise lui-même les IP recalées (`/tmp/vpn-check.bad`, perdu à la
 recréation du conteneur) et les recale d'office pendant `VPN_CHECK_BAD_TTL_SECONDS`, ce qui évite de reprendre un serveur
 qui vient d'échouer ; l'expiration empêche qu'un filtre à peu de serveurs soit entièrement exclu.
 
-**État des tunnels.** Le gateway écrit `/run/gateway/tunnels.json` à chaque cycle (`{"written_at", "tunnels": [{"name", "up", "public_ip", "latency_ms", "down_mbps", "measured_at"}]}`, les quatre derniers champs à `null` sans mesure). `vpn-check.sh` dépose la dernière mesure d'un tunnel validé dans `/gateway-state/measure-<VPN_CHECK_NAME>` (`latence_ms débit_mbit date ip_publique`) : `gateway-state` est le même volume que `/run/gateway` côté gateway, les Gluetun doivent donc pouvoir écrire dans ce volume (montage sans `:ro`, comme dans l'exemple, et dans tout compose de production) : sans écriture, aucune mesure n'est déposée et ces champs restent `null`.
+**État des tunnels.** Le gateway écrit `/run/gateway/tunnels.json` à chaque cycle (`{"written_at", "tunnels": [{"name", "up", "public_ip", "latency_ms", "down_mbps", "measured_at"}]}`, les quatre derniers champs à `null` sans mesure). `vpn-check.sh` dépose la dernière mesure d'un tunnel validé dans `/gateway-measure/measure` (`latence_ms débit_mbit date ip_publique`), un volume propre à chaque Gluetun (`measure-vpn1`, `measure-vpn2`…) : c'est le seul endroit où un Gluetun écrit, `gateway-state` reste en lecture seule chez lui. Le gateway monte ces volumes en lecture seule sur `/run/gateway-measure/vpn1`, `vpn2`… (tout compose de production doit faire de même) et traite le fichier comme non fiable : il n'est lu que s'il est un fichier ordinaire (jamais un lien symbolique) et chaque champ est validé. Sans ce volume, aucune mesure n'est déposée et `public_ip`, `latency_ms`, `down_mbps`, `measured_at` restent `null`. `tunnels.json` reste dans `/run/gateway` (volume `gateway-state`, écrit par le gateway seul).
 
 ## 5. Validation
 

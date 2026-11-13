@@ -56,7 +56,8 @@ services:
       VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-ookla}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
     volumes:
-      - gateway-state:/gateway-state
+      - gateway-state:/gateway-state:ro
+      - measure-vpn1:/gateway-measure           # la mesure de CE tunnel, seul dossier où ce Gluetun écrit
       - ../gluetun/post-rules-1.txt:/iptables/post-rules.txt:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.11 }
@@ -79,7 +80,8 @@ services:
       VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-ookla}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
     volumes:
-      - gateway-state:/gateway-state
+      - gateway-state:/gateway-state:ro
+      - measure-vpn2:/gateway-measure           # la mesure de CE tunnel, seul dossier où ce Gluetun écrit
       - ../gluetun/post-rules-2.txt:/iptables/post-rules.txt:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.12 }
@@ -102,7 +104,8 @@ services:
       VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-ookla}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
     volumes:
-      - gateway-state:/gateway-state
+      - gateway-state:/gateway-state:ro
+      - measure-vpn3:/gateway-measure           # la mesure de CE tunnel, seul dossier où ce Gluetun écrit
       - ../gluetun/post-rules-3.txt:/iptables/post-rules.txt:ro
     networks:
       frontend:    { ipv4_address: 172.30.10.13 }
@@ -206,6 +209,10 @@ services:
     volumes:
       - docker-proxy:/var/run/docker-proxy:ro      # socket Docker filtré par socket-proxy : relance de conteneurs seulement
       - gateway-state:/run/gateway                  # donne aux Gluetun vpn-check.sh et la liste des tunnels en vie (« up »)
+      # Mesures des tunnels (latence, débit), écrites par chaque Gluetun : lues ici, jamais écrites.
+      - measure-vpn1:/run/gateway-measure/vpn1:ro
+      - measure-vpn2:/run/gateway-measure/vpn2:ro
+      - measure-vpn3:/run/gateway-measure/vpn3:ro
     healthcheck:
       # "healthy" = firewall fail-closed chargé (PAS "un VPN est up") : l'app peut démarrer sans risque.
       test: ["CMD", "nft", "list", "table", "inet", "vpngw"]
@@ -232,6 +239,9 @@ services:
 volumes:
   gateway-state:
   docker-proxy:
+  measure-vpn1:
+  measure-vpn2:
+  measure-vpn3:
 
 networks:
   frontend:
