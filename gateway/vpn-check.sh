@@ -15,6 +15,9 @@ SPEED_URL=${VPN_CHECK_SPEED_URL:-https://proof.ovh.net/files/10Mb.dat}
 # 0 : un serveur validé n'est jamais retesté. Sinon, retest toutes les N secondes, tant qu'un autre tunnel est en vie.
 RECHECK_SECONDS=${VPN_CHECK_RECHECK_SECONDS:-0}
 TUNNEL_NAME=${VPN_CHECK_NAME:-}
+# 1 : un serveur dont tun0 n'a pas d'adresse IPv6 globale est recalé (Linux retire l'IPv6 d'une interface dont le MTU, découvert
+# par Gluetun, est sous 1280). 0 (défaut) : aucun contrôle, pour un fournisseur sans IPv6. À poser sur le Gluetun concerné.
+REQUIRE_IPV6=${VPN_CHECK_REQUIRE_IPV6:-0}
 GATEWAY_UP_FILE=/gateway-state/up
 MEASURE_FILE=/gateway-measure/measure
 # Une IP recalée est recalée d'office, sans test, pendant ce délai (0 : aucune mémoire).
@@ -106,6 +109,10 @@ reject() {
 	done
 	exit 1
 }
+
+tunnel_has_ipv6() { ip -6 addr show dev tun0 2>/dev/null | grep -q 'inet6 .* scope global'; }
+
+[ "$REQUIRE_IPV6" != 1 ] || tunnel_has_ipv6 || reject "tun0 sans IPv6 (MTU $(cat /sys/class/net/tun0/mtu 2>/dev/null || echo ?))"
 
 ip_is_recently_bad && reject "déjà recalé il y a moins de ${BAD_TTL_SECONDS} s"
 

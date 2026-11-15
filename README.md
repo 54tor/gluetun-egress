@@ -590,6 +590,7 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_SPEED_URL` | `https://proof.ovh.net/files/10Mb.dat` (fichier de taille fixe) |
 | `VPN_CHECK_BYTES` | `10485760` (taille exacte du fichier ci-dessus, base du calcul du débit) |
 | `VPN_CHECK_MAX_REROLLS` | `8` |
+| `VPN_CHECK_REQUIRE_IPV6` | `0` (`1` : un serveur dont `tun0` n'a pas d'adresse IPv6 globale, par exemple après un MTU découvert sous 1280, est recalé ; à poser sur les Gluetun dont le fournisseur donne une IPv6) |
 | `VPN_CHECK_BAD_TTL_SECONDS` | `86400` (une IP recalée l'est d'office, sans test, pendant ce délai ; `0` : aucune mémoire) |
 | `VPN_CHECK_ENGINE` | `ookla` (speedtest d'Ookla : latence et débit, voir ci-dessous) ou `http` (téléchargement de `VPN_CHECK_BYTES`) |
 | `VPN_CHECK_OOKLA_ACCEPT_LICENSE` | `yes`. `no` : la licence d'Ookla n'est pas acceptée et le moteur `ookla` se replie sur `http` (une ligne dans les logs) |
