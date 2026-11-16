@@ -20,6 +20,25 @@ json_adresse_ou_null() {
 	esac
 }
 
+# Les adresses qui joignent le proxy d'entrée depuis le Gluetun du tunnel « vpn<N> » : la N-ième de VPN_IPS et de VPN_IPS6. Un
+# consommateur les rapproche de la table des connexions du proxy (clé : adresse source) pour compter celles de chaque ligne.
+# Un nom qui n'est pas « vpn<N> », ou un rang hors liste, rend « [] » : jamais d'erreur, le JSON reste valide.
+json_adresses_d_entree() {
+	rang_du_tunnel=${1#vpn}
+	case "$rang_du_tunnel" in '' | *[!0-9]*) echo '[]'; return 0 ;; esac
+	adresses_json=
+	for liste in "${VPN_IPS:-}" "${VPN_IPS6:-}"; do
+		position=0
+		for adresse in $liste; do
+			position=$((position + 1))
+			[ "$position" = "$rang_du_tunnel" ] || continue
+			case "$adresse" in *[!0-9a-fA-F.:]*) continue ;; esac
+			adresses_json="$adresses_json${adresses_json:+,}\"$adresse\""
+		done
+	done
+	echo "[$adresses_json]"
+}
+
 # Lit la première ligne, 255 octets au plus, hors du shell principal et sous délai : un fichier remplacé par un tube
 # entre le contrôle et la lecture ne bloque pas la boucle de sonde. Une ligne de 256 octets ou plus est refusée.
 lire_ligne_de_mesure() {
@@ -52,10 +71,10 @@ ecrire_etat_tunnels() {
 		read -r latence_ms debit_mbit date_mesure ip_publique <<EOF_MESURE
 $ligne_de_mesure
 EOF_MESURE
-		printf '%s{"name":"%s","up":%s,"public_ip":%s,"latency_ms":%s,"down_mbps":%s,"measured_at":%s}' \
+		printf '%s{"name":"%s","up":%s,"public_ip":%s,"latency_ms":%s,"down_mbps":%s,"measured_at":%s,"ingress_ips":%s}' \
 			"$separateur" "$nom_du_tunnel" "$est_up" "$(json_adresse_ou_null "$ip_publique")" \
 			"$(json_nombre_ou_null "$latence_ms")" "$(json_nombre_ou_null "$debit_mbit")" \
-			"$(json_nombre_ou_null "$date_mesure")" >> "$fichier_temporaire"
+			"$(json_nombre_ou_null "$date_mesure")" "$(json_adresses_d_entree "$nom_du_tunnel")" >> "$fichier_temporaire"
 		separateur=,
 	done
 	printf ']}\n' >> "$fichier_temporaire"

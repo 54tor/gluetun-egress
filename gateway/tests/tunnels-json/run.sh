@@ -37,6 +37,10 @@ verifier "vpn1-latence" 42 "$(jq '.tunnels[] | select(.name == "vpn1") | .latenc
 verifier "vpn1-debit" 310 "$(jq '.tunnels[] | select(.name == "vpn1") | .down_mbps' "$fichier_tunnels")"
 verifier "vpn1-date-mesure" 1700000000 "$(jq '.tunnels[] | select(.name == "vpn1") | .measured_at' "$fichier_tunnels")"
 verifier "vpn1-ip" '"203.0.113.7"' "$(jq '.tunnels[] | select(.name == "vpn1") | .public_ip' "$fichier_tunnels")"
+verifier "vpn1-aucune-adresse-sans-environnement" '[]' "$(jq -c '.tunnels[] | select(.name == "vpn1") | .ingress_ips' "$fichier_tunnels")"
+VPN_IPS="172.30.20.11 172.30.20.12" VPN_IPS6="fd30:20::11 fd30:20::12" ecrire_etat_tunnels "$fichier_tunnels" "$dossier_de_travail" "vpn1:1 vpn2:1 vpn9:1" 1700000100
+verifier "vpn2-adresses-d-entree" '["172.30.20.12","fd30:20::12"]' "$(jq -c '.tunnels[] | select(.name == "vpn2") | .ingress_ips' "$fichier_tunnels")"
+verifier "rang-hors-liste-vide" '[]' "$(jq -c '.tunnels[] | select(.name == "vpn9") | .ingress_ips' "$fichier_tunnels")"
 verifier "aucun-temporaire" 1 "$(find "$dossier_de_travail" -maxdepth 1 -name '*tunnels.json*' | wc -l | tr -d ' ')"
 
 # Mesure qui est un lien symbolique (vers un fichier lisible) : refusée, champs à null
