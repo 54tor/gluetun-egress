@@ -116,7 +116,8 @@ tunnel_has_ipv6() { ip -6 addr show dev tun0 2>/dev/null | grep -q 'inet6 .* sco
 
 ip_is_recently_bad && reject "déjà recalé il y a moins de ${BAD_TTL_SECONDS} s"
 
-# Renseigne latency (ms) et mbps. Ookla : bandwidth est en octets par seconde, ping.latency en millisecondes.
+up_mbps=
+# Renseigne latency (ms) et mbps ; up_mbps (Ookla seulement) reste vide quand la mesure HTTP n'envoie rien. Ookla : bandwidth est en octets par seconde, ping.latency en millisecondes.
 measure_with_http() {
 	t0=$(now_ms)
 	wget -q -T 5 -O /dev/null https://9.9.9.9/ || reject "9.9.9.9 muet"
@@ -194,7 +195,9 @@ measure_with_ookla() {
 		|| reject "speedtest Ookla en échec"
 	latency=$(echo "$speedtest_json" | sed -n 's/.*"ping":{[^}]*"latency":\([0-9]*\).*/\1/p')
 	download_bytes_per_second=$(echo "$speedtest_json" | sed -n 's/.*"download":{"bandwidth":\([0-9]*\).*/\1/p')
+	upload_bytes_per_second=$(echo "$speedtest_json" | sed -n 's/.*"upload":{"bandwidth":\([0-9]*\).*/\1/p')
 	[ -n "$latency" ] && [ -n "$download_bytes_per_second" ] || reject "sortie speedtest Ookla illisible"
+	[ -z "$upload_bytes_per_second" ] || up_mbps=$(( upload_bytes_per_second * 8 / 1000000 ))
 	mbps=$(( download_bytes_per_second * 8 / 1000000 ))
 	[ $latency -le "$MAX_LATENCY_MS" ] || reject "latence ${latency} ms > ${MAX_LATENCY_MS} ms"
 }
@@ -206,9 +209,9 @@ fi
 if [ "$ENGINE" = ookla ]; then measure_with_ookla; else measure_with_http; fi
 [ $mbps -ge "$MIN_MBPS" ] || reject "débit ${mbps} Mbit/s < ${MIN_MBPS} Mbit/s"
 
-log "validé : ${latency} ms, ${mbps} Mbit/s"
+log "validé : ${latency} ms, ${mbps} Mbit/s${up_mbps:+, montant ${up_mbps} Mbit/s}"
 # Mesure lue par le gateway (tunnels.json) dans le volume propre à ce tunnel ; sans ce volume, l'écriture échoue sans conséquence.
-{ echo "$latency $mbps $(date +%s) $ip" >"$MEASURE_FILE.tmp" && mv "$MEASURE_FILE.tmp" "$MEASURE_FILE"; } 2>/dev/null || true
+{ echo "$latency $mbps $(date +%s) $ip $up_mbps" >"$MEASURE_FILE.tmp" && mv "$MEASURE_FILE.tmp" "$MEASURE_FILE"; } 2>/dev/null || true
 echo "$ip" >$PASSED
 date +%s >$PASSED_AT
 rm -f $TRIES

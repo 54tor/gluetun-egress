@@ -1,8 +1,8 @@
 # shellcheck shell=sh
 # Écriture de tunnels.json : l'état de chaque tunnel (up, IP publique, latence, débit) pour la supervision.
 # Source de entrypoint.sh. La mesure d'un tunnel est écrite par vpn-check.sh dans <dossier>/<tunnel>/measure :
-# « latence_ms débit_mbit date [ip_publique] », dans un volume que le Gluetun écrit : le fichier n'est pas fiable (lu
-# seulement s'il est un fichier ordinaire, jamais un lien, et chaque champ est validé). Sans mesure lisible, les quatre champs de mesure valent null.
+# « latence_ms débit_mbit date [ip_publique [débit_montant_mbit]] », dans un volume que le Gluetun écrit : le fichier n'est pas fiable (lu
+# seulement s'il est un fichier ordinaire, jamais un lien, et chaque champ est validé). Sans mesure lisible, les champs de mesure valent null.
 
 # Un nombre entier, sinon null : le JSON reste valide quoi que contienne le fichier de mesure.
 json_nombre_ou_null() {
@@ -62,18 +62,18 @@ ecrire_etat_tunnels() {
 	for etat_du_tunnel in $etats_des_tunnels; do
 		nom_du_tunnel=${etat_du_tunnel%%:*}
 		[ "${etat_du_tunnel##*:}" = 1 ] && est_up=true || est_up=false
-		latence_ms= debit_mbit= date_mesure= ip_publique=
+		latence_ms= debit_mbit= date_mesure= ip_publique= debit_montant_mbit=
 		fichier_de_mesure="$dossier_des_mesures/$nom_du_tunnel/measure"
 		ligne_de_mesure=
 		if [ -f "$fichier_de_mesure" ] && [ ! -L "$fichier_de_mesure" ]; then
 			ligne_de_mesure=$(lire_ligne_de_mesure "$fichier_de_mesure")
 		fi
-		read -r latence_ms debit_mbit date_mesure ip_publique <<EOF_MESURE
+		read -r latence_ms debit_mbit date_mesure ip_publique debit_montant_mbit <<EOF_MESURE
 $ligne_de_mesure
 EOF_MESURE
-		printf '%s{"name":"%s","up":%s,"public_ip":%s,"latency_ms":%s,"down_mbps":%s,"measured_at":%s,"ingress_ips":%s}' \
+		printf '%s{"name":"%s","up":%s,"public_ip":%s,"latency_ms":%s,"down_mbps":%s,"up_mbps":%s,"measured_at":%s,"ingress_ips":%s}' \
 			"$separateur" "$nom_du_tunnel" "$est_up" "$(json_adresse_ou_null "$ip_publique")" \
-			"$(json_nombre_ou_null "$latence_ms")" "$(json_nombre_ou_null "$debit_mbit")" \
+			"$(json_nombre_ou_null "$latence_ms")" "$(json_nombre_ou_null "$debit_mbit")" "$(json_nombre_ou_null "$debit_montant_mbit")" \
 			"$(json_nombre_ou_null "$date_mesure")" "$(json_adresses_d_entree "$nom_du_tunnel")" >> "$fichier_temporaire"
 		separateur=,
 	done

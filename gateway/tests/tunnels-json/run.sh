@@ -22,7 +22,7 @@ verifier() { # $1=scénario $2=valeur attendue $3=valeur obtenue
 
 # vpn1 : up avec mesure (latence, débit, date, IP publique) ; vpn2 : up sans mesure ; vpn3 : down
 mkdir -p "$dossier_de_travail/vpn1" "$dossier_de_travail/vpn4"
-echo "42 310 1700000000 203.0.113.7" > "$dossier_de_travail/vpn1/measure"
+echo "42 310 1700000000 203.0.113.7 95" > "$dossier_de_travail/vpn1/measure"
 fichier_tunnels="$dossier_de_travail/tunnels.json"
 ecrire_etat_tunnels "$fichier_tunnels" "$dossier_de_travail" "vpn1:1 vpn2:1 vpn3:0" 1700000100
 
@@ -35,6 +35,8 @@ verifier "vpn2-latence-null" null "$(jq '.tunnels[] | select(.name == "vpn2") | 
 verifier "vpn2-ip-null" null "$(jq '.tunnels[] | select(.name == "vpn2") | .public_ip' "$fichier_tunnels")"
 verifier "vpn1-latence" 42 "$(jq '.tunnels[] | select(.name == "vpn1") | .latency_ms' "$fichier_tunnels")"
 verifier "vpn1-debit" 310 "$(jq '.tunnels[] | select(.name == "vpn1") | .down_mbps' "$fichier_tunnels")"
+verifier "vpn1-debit-montant" 95 "$(jq '.tunnels[] | select(.name == "vpn1") | .up_mbps' "$fichier_tunnels")"
+verifier "vpn2-debit-montant-null" null "$(jq '.tunnels[] | select(.name == "vpn2") | .up_mbps' "$fichier_tunnels")"
 verifier "vpn1-date-mesure" 1700000000 "$(jq '.tunnels[] | select(.name == "vpn1") | .measured_at' "$fichier_tunnels")"
 verifier "vpn1-ip" '"203.0.113.7"' "$(jq '.tunnels[] | select(.name == "vpn1") | .public_ip' "$fichier_tunnels")"
 verifier "vpn1-aucune-adresse-sans-environnement" '[]' "$(jq -c '.tunnels[] | select(.name == "vpn1") | .ingress_ips' "$fichier_tunnels")"
