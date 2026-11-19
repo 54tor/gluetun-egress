@@ -512,8 +512,8 @@ cause rien : sans Gluetun, rien ne sort (`unreachable`, réseau `internal`).
 - **Fermeture côté hôte (éprouvée IPv4)** : une règle `DOCKER-USER` qui jette tout paquet issu du réseau `vpn-gateway`
   sortant par un autre bridge. Essai du 2026-10-14 : 0 paquet sorti sur 8 essais (5 démarrages, 3 redémarrages), contre
   5 à 50 paquets sans la règle dans les 2 essais témoins ; 40 paquets jetés au compteur ; les Gluetun ne sont pas
-  touchés, leur trafic légitime ne traverse jamais ce chemin. L'IPv6 (`ip6tables`, préfixe ULA) n'a pas été éprouvée,
-  faute de fuite v6 à fermer.
+  touchés, leur trafic légitime ne traverse jamais ce chemin. La jumelle IPv6 (`ip6tables`, préfixe ULA) est posée
+  par le même script, mais n'a pas été éprouvée sur un vrai hôte, faute de fuite v6 à fermer.
 
   ```sh
   iptables -I DOCKER-USER -s 172.30.0.0/16 ! -o vpngw+ -j DROP
@@ -537,7 +537,7 @@ Caddy. Le compose de l'exemple nomme le pont (`com.docker.network.bridge.name: v
 ```sh
 sudo install -m 755 host/vpngw-firewall.sh /usr/local/sbin/vpngw-firewall.sh
 sudo install -d /etc/gluetun-egress
-sudo cp host/vpngw.conf.example /etc/gluetun-egress/vpngw.conf    # une ligne « sous-réseau pont » par pile
+sudo cp host/vpngw.conf.example /etc/gluetun-egress/vpngw.conf    # une ligne « sous-réseau pont » par pile et par famille
 sudo cp host/vpngw-firewall.service /etc/systemd/system/
 sudo systemctl enable --now vpngw-firewall
 sudo iptables -vnL DOCKER-USER                                    # la règle et son compteur
@@ -546,7 +546,9 @@ sudo iptables -vnL DOCKER-USER                                    # la règle et
 `vpngw-firewall.sh status` dit si chaque règle est posée, `down` les retire. Pour vérifier la fermeture : `docker restart` d'un
 Gluetun, puis relire le compteur de la règle (un compteur qui monte = des paquets qui auraient fui). Essai du 2026-11-19 sur une
 pile à deux Gluetun (démarrage à froid, puis trois `docker restart` de `gluetun1`) : 1 paquet jeté, pont `vpngw-egress` créé, sortie
-de l'application par le VPN 1 inchangée ; pas de témoin sans règle. IPv4 seulement, comme la mesure d'origine. Test sans droit
+de l'application par le VPN 1 inchangée ; pas de témoin sans règle. Un sous-réseau IPv6 de la configuration (`fd30:20::/64`
+dans l'exemple) passe par `ip6tables` avec la même règle ; elle exige la chaîne `DOCKER-USER` d'`ip6tables`, que Docker crée avec son
+`ip6tables` actif, et le service échoue bruyamment si elle manque (retirer alors la ligne IPv6 de la configuration). Test sans droit
 root : `sh host/tests/firewall/run.sh`.
 
 ### 4.7 Entrée par tunnels WireGuard

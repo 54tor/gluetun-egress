@@ -82,4 +82,4 @@ fi
 
 printf 'FRONTEND_PREFIX=%s\nVPN_PREFIX=%s\nULA_PREFIX=%s\nNOM_DE_PILE=%s\nPONT=%s\n' "$nouveau_frontend" "$nouveau_vpn" "$nouvel_ula" "$nouveau_nom" "$nouveau_pont" > "$fichier_des_valeurs"
 echo "set-addressing : pile $nouveau_nom, frontend $nouveau_frontend.0/24, vpn-gateway $nouveau_vpn.0/24, ULA $nouvel_ula::/64, pont $nouveau_pont"
-echo "À faire : ajouter « $nouveau_vpn.0/24 $nouveau_pont » à /etc/gluetun-egress/vpngw.conf (hôte, une ligne par pile)."
+echo "À faire : ajouter « $nouveau_vpn.0/24 $nouveau_pont » et « $nouvel_ula::/64 $nouveau_pont » à /etc/gluetun-egress/vpngw.conf (hôte, une ligne par pile et par famille)."

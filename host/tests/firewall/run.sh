@@ -1,5 +1,5 @@
 #!/bin/sh
-# Test de vpngw-firewall.sh avec un faux iptables (l'état des règles est un fichier) : aucune règle réelle, aucun droit root.
+# Test de vpngw-firewall.sh avec un faux iptables et un faux ip6tables (l'état des règles est un fichier chacun) : aucune règle réelle, aucun droit root.
 # Sortie : « OK <cas> » ou « ECHEC <cas> : attendu [...], obtenu [...] » ; code de sortie 0 si tout passe.
 set -u
 
@@ -25,12 +25,39 @@ case "$action" in
 	-D) grep -vxF -- "$*" "$etat" > "$etat.tmp" || true; mv "$etat.tmp" "$etat" ;;
 esac
 FAUX
-chmod +x "$dossier_de_travail/iptables"
+sed 's/ETAT_IPTABLES/ETAT_IP6TABLES/' "$dossier_de_travail/iptables" > "$dossier_de_travail/ip6tables"
+chmod +x "$dossier_de_travail/iptables" "$dossier_de_travail/ip6tables"
 export ETAT_IPTABLES="$dossier_de_travail/etat" IPTABLES="$dossier_de_travail/iptables" ATTENTE_CHAINE=1
+export ETAT_IP6TABLES="$dossier_de_travail/etat6" IP6TABLES="$dossier_de_travail/ip6tables"
 : > "$ETAT_IPTABLES"
+: > "$ETAT_IP6TABLES"
 
 fichier_de_reseaux="$dossier_de_travail/vpngw.conf"
 printf '# commentaire\n\n172.30.20.0/24 vpngw-egress\n10.50.2.0/24 vpngw-autre\n' > "$fichier_de_reseaux"
+
+printf 'fd30:20::/64 vpngw-egress\n' > "$dossier_de_travail/ipv6.conf"
+sh "$script_a_tester" up "$dossier_de_travail/ipv6.conf" >/dev/null
+verifier "ipv6-regle-dans-ip6tables" "DOCKER-USER -s fd30:20::/64 ! -o vpngw-egress -j DROP" "$(sed -n 1p "$ETAT_IP6TABLES")"
+verifier "ipv6-rien-dans-iptables" 0 "$(wc -l < "$ETAT_IPTABLES")"
+sh "$script_a_tester" up "$dossier_de_travail/ipv6.conf" >/dev/null
+verifier "ipv6-up-deux-fois-sans-doublon" 1 "$(wc -l < "$ETAT_IP6TABLES")"
+verifier "ipv6-status-posee" "fd30:20::/64 hors de vpngw-egress : posée" "$(sh "$script_a_tester" status "$dossier_de_travail/ipv6.conf" | sed -n 1p)"
+touch "$ETAT_IP6TABLES.sans-chaine"
+sh "$script_a_tester" up "$dossier_de_travail/ipv6.conf" >/dev/null 2>&1
+verifier "ipv6-chaine-absente-echec" 1 "$?"
+sh "$script_a_tester" down "$dossier_de_travail/ipv6.conf" >/dev/null 2>&1
+verifier "ipv6-down-sans-chaine-sans-erreur" 0 "$?"
+rm -f "$ETAT_IP6TABLES.sans-chaine"
+sh "$script_a_tester" down "$dossier_de_travail/ipv6.conf" >/dev/null
+verifier "ipv6-down-retire" 0 "$(wc -l < "$ETAT_IP6TABLES")"
+printf '172.30.20.0/24 vpngw-egress\nfd30:20::/64 vpngw-egress\n' > "$dossier_de_travail/double.conf"
+sh "$script_a_tester" up "$dossier_de_travail/double.conf" >/dev/null
+verifier "double-famille-une-regle-chacune" "1 1" "$(wc -l < "$ETAT_IPTABLES") $(wc -l < "$ETAT_IP6TABLES")"
+sh "$script_a_tester" down "$dossier_de_travail/double.conf" >/dev/null
+verifier "double-famille-down" "0 0" "$(wc -l < "$ETAT_IPTABLES") $(wc -l < "$ETAT_IP6TABLES")"
+printf 'zz:zz::/64 vpngw-egress\n' > "$dossier_de_travail/mauvais.conf"
+sh "$script_a_tester" up "$dossier_de_travail/mauvais.conf" >/dev/null 2>&1
+verifier "sous-reseau-ipv6-invalide-refuse" 1 "$?"
 
 sh "$script_a_tester" up "$fichier_de_reseaux" >/dev/null
 verifier "deux-reseaux-deux-regles" 2 "$(wc -l < "$ETAT_IPTABLES")"

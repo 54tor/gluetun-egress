@@ -27,7 +27,7 @@ verifier "plus-de-trace-ipv4-vpn" 0 "$(traces "$(echo "$VPN_PREFIX." | sed 's/\.
 verifier "plus-de-trace-ula" 0 "$(traces "$ULA_PREFIX::")"
 verifier "valeurs-courantes-a-jour" "10.77.1 10.77.2 fd77:7" "$(. "$copie/tools/addressing.env"; echo "$FRONTEND_PREFIX $VPN_PREFIX $ULA_PREFIX")"
 verifier "compose-sur-le-nouveau-plan" 1 "$(grep -c 'ipv4_address: 10.77.1.10 ' "$copie/example/docker-compose.yml" | sed 's/^[2-9]$/1/')"
-verifier "hote-suit-le-sous-reseau-vpn" "10.77.2.0/24 vpngw-egress" "$(grep -v '^#' "$copie/host/vpngw.conf.example" | grep .)"
+verifier "hote-suit-le-sous-reseau-vpn" "$(printf '10.77.2.0/24 vpngw-egress\nfd77:7::/64 vpngw-egress')" "$(grep -v '^#' "$copie/host/vpngw.conf.example" | grep .)"
 verifier "tests-gateway-sur-le-nouveau-plan" 0 "$(sh "$copie/gateway/tests/probe-log/run.sh" 2>&1 | grep -vc '^OK')"
 verifier "tests-tunnels-sur-le-nouveau-plan" 0 "$(sh "$copie/gateway/tests/tunnels-json/run.sh" 2>&1 | grep -vc '^OK')"
 
@@ -47,7 +47,7 @@ sh "$copie/tools/set-addressing.sh" 10.77.1 10.77.2 - blog >/dev/null
 verifier "nom-de-projet" 1 "$(grep -c '^name: blog$' "$copie/example/docker-compose.yml")"
 verifier "plus-de-nom-d-origine" 0 "$(grep -rIlE '(^|[^A-Za-z0-9_])vpnstack-|^name: vpnstack$' "$copie" --exclude=README.md --exclude-dir=tools | wc -l)"
 verifier "pont-de-la-pile" 1 "$(grep -c 'bridge.name: vpngw-blog$' "$copie/example/docker-compose.yml")"
-verifier "hote-suit-le-pont" "10.77.2.0/24 vpngw-blog" "$(grep -v '^#' "$copie/host/vpngw.conf.example" | grep .)"
+verifier "hote-suit-le-pont" "$(printf '10.77.2.0/24 vpngw-blog\nfd77:7::/64 vpngw-blog')" "$(grep -v '^#' "$copie/host/vpngw.conf.example" | grep .)"
 verifier "valeurs-nom-pont" "blog vpngw-blog" "$(. "$copie/tools/addressing.env"; echo "$NOM_DE_PILE $PONT")"
 verifier "ula-conserve-avec-tiret" fd77:7 "$(. "$copie/tools/addressing.env"; echo "$ULA_PREFIX")"
 
