@@ -171,6 +171,7 @@ measure_with_http() {
 # somme vient du paquet AUR et d'un téléchargement recoupé), puis taille, contenu de l'archive, en-tête ELF x86_64, version annoncée.
 # 0 si le binaire est exploitable.
 check_speedtest_archive() {
+	[ -s "$1" ] || { log "CLI Ookla refusé : téléchargement vide"; return 1; }
 	if [ -z "$OOKLA_SHA256" ]; then
 		log "CLI Ookla refusé : aucune somme SHA-256 pour la version $OOKLA_VERSION (VPN_CHECK_OOKLA_SHA256)"
 		return 1
@@ -203,12 +204,18 @@ check_speedtest_archive() {
 	echo "$version_line" | grep -q "Speedtest by Ookla $OOKLA_VERSION" || { log "CLI Ookla refusé : version annoncée « $version_line », attendue $OOKLA_VERSION"; return 1; }
 }
 
+# Un tunnel qui vient de monter n'a pas toujours de route ni de DNS : le téléchargement attend que 1.1.1.1 réponde.
+tunnel_has_internet() {
+	wget -q -T 5 -O /dev/null https://1.1.1.1/cdn-cgi/trace
+}
+
 # 0 si $SPEEDTEST_BIN est prêt. Le téléchargement passe par le tunnel (HTTPS, certificats vérifiés par wget, aucune redirection suivie),
 # lu sur 30 Mo au plus et 30 s au plus.
 fetch_speedtest() {
 	[ -x "$SPEEDTEST_BIN" ] && return 0
 	last_failure=$(cat "$SPEEDTEST_DIR.failed" 2>/dev/null || echo 0)
 	[ $(( $(date +%s) - last_failure )) -ge "$OOKLA_RETRY_SECONDS" ] || return 1
+	tunnel_has_internet || { log "CLI Ookla : le tunnel n'a pas encore internet, nouvel essai au prochain contrôle"; return 1; }
 	date +%s >"$SPEEDTEST_DIR.failed"
 	case "$OOKLA_URL" in https://*) ;; *) log "CLI Ookla refusé : VPN_CHECK_OOKLA_URL doit être en https"; return 1 ;; esac
 	[ "$(uname -m)" = x86_64 ] || { log "CLI Ookla : architecture $(uname -m), x86_64 seulement"; return 1; }

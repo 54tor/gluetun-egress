@@ -11,7 +11,7 @@ dossier_temporaire=$(mktemp -d)
 trap 'rm -rf "$dossier_temporaire"' EXIT
 nombre_echecs=0
 
-for fonction in check_speedtest_archive fetch_speedtest; do
+for fonction in check_speedtest_archive fetch_speedtest tunnel_has_internet; do
 	definition=$(sed -n "/^$fonction() {/,/^}/p" "$dossier_du_test/../../vpn-check.sh")
 	[ -n "$definition" ] || { echo "ECHEC extraction : $fonction introuvable dans vpn-check.sh"; exit 1; }
 	eval "$definition"
@@ -71,6 +71,11 @@ controler_somme() { # $1=cas $2=somme donnée au script (vide : aucune) $3=fragm
 	verifier "$1-code" 1 "$?"
 	grep -q "$3" "$journal" && verifier "$1-raison" ok ok || verifier "$1-raison" "$3" "$(cat "$journal")"
 }
+: >"$dossier_temporaire/vide.tgz"
+: >"$journal"
+check_speedtest_archive "$dossier_temporaire/vide.tgz" "$dossier_temporaire" >/dev/null 2>&1
+verifier "archive-vide-code" 1 "$?"
+grep -q "téléchargement vide" "$journal" && verifier "archive-vide-raison" ok ok || verifier "archive-vide-raison" "téléchargement vide" "$(cat "$journal")"
 controler_somme "somme-absente" "" "aucune somme SHA-256"
 controler_somme "somme-differente" "0000000000000000000000000000000000000000000000000000000000000000" "somme SHA-256 reçue"
 
@@ -79,6 +84,7 @@ mkdir "$dossier_temporaire/faux"
 printf '#!/bin/sh\necho appel >>"%s/appels"\n' "$dossier_temporaire" >"$dossier_temporaire/faux/wget"
 chmod +x "$dossier_temporaire/faux/wget"
 PATH="$dossier_temporaire/faux:$PATH"
+tunnel_has_internet() { return 0; }
 appels() { [ -f "$dossier_temporaire/appels" ] && wc -l <"$dossier_temporaire/appels" || echo 0; }
 SPEEDTEST_DIR="$dossier_temporaire/speedtest"
 SPEEDTEST_BIN="$SPEEDTEST_DIR/speedtest"
@@ -97,6 +103,14 @@ OOKLA_URL=http://exemple.invalide/ookla.tgz
 fetch_speedtest >/dev/null 2>&1
 verifier "url-http-refusee-code" 1 "$?"
 verifier "url-http-sans-appel" 2 "$(appels)"
+tunnel_has_internet() { return 1; }
+rm -f "$SPEEDTEST_DIR.failed"
+OOKLA_URL=https://exemple.invalide/ookla.tgz
+fetch_speedtest >/dev/null 2>&1
+verifier "sans-internet-code" 1 "$?"
+verifier "sans-internet-sans-appel" 2 "$(appels)"
+[ ! -f "$SPEEDTEST_DIR.failed" ] && verifier "sans-internet-sans-penalite" ok ok || verifier "sans-internet-sans-penalite" ok penalite
+tunnel_has_internet() { return 0; }
 mkdir -p "$SPEEDTEST_DIR" && printf '#!/bin/sh\n' >"$SPEEDTEST_BIN" && chmod +x "$SPEEDTEST_BIN"
 fetch_speedtest
 verifier "binaire-present-pas-de-telechargement" 0 "$?"
