@@ -229,7 +229,6 @@ measure_with_ookla() {
 		return
 	fi
 
-	wget -q -T 5 -O /dev/null https://1.1.1.1/cdn-cgi/trace || reject "1.1.1.1 muet"
 	for url in $URLS; do
 		wget -q -T 10 -O /dev/null "$url" || reject "$url muet"
 	done
