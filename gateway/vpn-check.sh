@@ -91,7 +91,9 @@ validation_is_still_valid && exit 0
 FAST_START=${VPN_CHECK_FAST_START:-1}
 MEASURE_PID=$STATE.measure_pid
 if [ "$FAST_START" = 1 ] && [ -z "$VPN_CHECK_IN_BACKGROUND" ]; then
-	kill -0 "$(cat $MEASURE_PID 2>/dev/null)" 2>/dev/null || {
+	# BusyBox : « kill -0 "" » réussit, un fichier de PID absent ou vide doit donc être écarté avant.
+	measure_pid=$(cat $MEASURE_PID 2>/dev/null)
+	{ [ -n "$measure_pid" ] && kill -0 "$measure_pid" 2>/dev/null; } || {
 		VPN_CHECK_IN_BACKGROUND=1 setsid sh "$0" >/dev/null 2>&1 </dev/null &
 		echo $! >$MEASURE_PID
 	}
