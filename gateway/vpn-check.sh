@@ -68,8 +68,15 @@ another_tunnel_is_up() {
 	return 1
 }
 
+# Vrai tant que le fichier de mesure n'a ni latence chiffrée ni l'IP courante (« - - - <ip> » ne compte pas comme une mesure).
+measure_is_missing_for_this_ip() {
+	! awk -v ip="$ip" 'NR == 1 { found = ($1 ~ /^[0-9]+$/ && $4 == ip) } END { exit !found }' "$MEASURE_FILE" 2>/dev/null
+}
+
 validation_is_still_valid() {
 	[ "$(cat $PASSED 2>/dev/null)" = "$ip" ] || return 1
+	# Une IP validée avant l'arrivée de la mesure n'en a aucune : on la mesure une fois, si un autre tunnel prend le relais.
+	if measure_is_missing_for_this_ip && another_tunnel_is_up; then return 1; fi
 	[ "$RECHECK_SECONDS" -gt 0 ] || return 0
 	validation_age_seconds=$(( $(date +%s) - $(cat $PASSED_AT 2>/dev/null || echo 0) ))
 	[ "$validation_age_seconds" -ge "$RECHECK_SECONDS" ] || return 0
