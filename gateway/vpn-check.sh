@@ -22,13 +22,16 @@ GATEWAY_UP_FILE=/gateway-state/up
 MEASURE_FILE=/gateway-measure/measure
 # Une IP recalée est recalée d'office, sans test, pendant ce délai (0 : aucune mémoire).
 BAD_TTL_SECONDS=${VPN_CHECK_BAD_TTL_SECONDS:-86400}
-# ookla : speedtest d'Ookla (latence et débit), lourd : voir le README. http : un téléchargement de VPN_CHECK_BYTES.
-ENGINE=${VPN_CHECK_ENGINE:-ookla}
+# http (défaut) : un téléchargement de VPN_CHECK_BYTES, aucun binaire tiers. ookla : speedtest d'Ookla (latence et débit montant), lourd : voir le README.
+ENGINE=${VPN_CHECK_ENGINE:-http}
 # « yes » accepte la licence d'Ookla (usage personnel et non commercial) ; « no » : la mesure retombe sur http.
 OOKLA_ACCEPT_LICENSE=${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
 # Le CLI d'Ookla n'est pas dans l'image (binaire non redistribuable) : téléchargé une fois, par le tunnel validé, et gardé dans /tmp.
 OOKLA_VERSION=${VPN_CHECK_OOKLA_VERSION:-1.2.0}
 OOKLA_URL=${VPN_CHECK_OOKLA_URL:-https://install.speedtest.net/app/cli/ookla-speedtest-$OOKLA_VERSION-linux-x86_64.tgz}
+# Somme SHA-256 de l'archive : sans elle, le binaire est refusé. Connue pour la 1.2.0 seulement ; pour une autre version, la fournir.
+OOKLA_SHA256=${VPN_CHECK_OOKLA_SHA256:-}
+[ -n "$OOKLA_SHA256" ] || [ "$OOKLA_VERSION" != 1.2.0 ] || OOKLA_SHA256=5690596c54ff9bed63fa3732f818a05dbc2db19ad36ed68f21ca5f64d5cfeeb7
 # Après un échec de téléchargement ou de contrôle, on ne retente qu'après ce délai (la mesure retombe sur http entre-temps).
 OOKLA_RETRY_SECONDS=${VPN_CHECK_OOKLA_RETRY_SECONDS:-3600}
 SPEEDTEST_DIR=/tmp/vpn-check-speedtest
@@ -155,9 +158,19 @@ measure_with_http() {
 	mbps=$(( BYTES * 8 / elapsed / 1000 ))
 }
 
-# Contrôles du CLI Ookla téléchargé ($1 = archive, $2 = dossier d'extraction), faute de somme de contrôle publiée : taille, contenu de
-# l'archive, en-tête ELF x86_64, version annoncée. 0 si le binaire est exploitable.
+# Contrôles du CLI Ookla téléchargé ($1 = archive, $2 = dossier d'extraction) : somme SHA-256 d'abord (Ookla n'en publie pas, la
+# somme vient du paquet AUR et d'un téléchargement recoupé), puis taille, contenu de l'archive, en-tête ELF x86_64, version annoncée.
+# 0 si le binaire est exploitable.
 check_speedtest_archive() {
+	if [ -z "$OOKLA_SHA256" ]; then
+		log "CLI Ookla refusé : aucune somme SHA-256 pour la version $OOKLA_VERSION (VPN_CHECK_OOKLA_SHA256)"
+		return 1
+	fi
+	received_sha256=$(sha256sum <"$1" | cut -d ' ' -f 1)
+	if [ "$received_sha256" != "$OOKLA_SHA256" ]; then
+		log "CLI Ookla refusé : somme SHA-256 reçue $received_sha256, attendue $OOKLA_SHA256"
+		return 1
+	fi
 	size=$(wc -c <"$1")
 	if [ "$size" -lt 500000 ] || [ "$size" -gt 30000000 ]; then
 		log "CLI Ookla refusé : $size octets reçus, hors de 0,5 à 30 Mo"

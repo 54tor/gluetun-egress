@@ -54,7 +54,7 @@ services:
       VPN_CHECK_NAME: vpn1              # nom du tunnel dans /run/gateway/up (rang dans VPN_IPS du gateway)
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
       VPN_CHECK_FAST_START: ${VPN_CHECK_FAST_START:-1}
-      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-ookla}
+      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
     volumes:
       - gateway-state:/gateway-state:ro
@@ -79,7 +79,7 @@ services:
       VPN_CHECK_NAME: vpn2
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
       VPN_CHECK_FAST_START: ${VPN_CHECK_FAST_START:-1}
-      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-ookla}
+      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
     volumes:
       - gateway-state:/gateway-state:ro
@@ -104,7 +104,7 @@ services:
       VPN_CHECK_NAME: vpn3
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
       VPN_CHECK_FAST_START: ${VPN_CHECK_FAST_START:-1}
-      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-ookla}
+      VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
     volumes:
       - gateway-state:/gateway-state:ro

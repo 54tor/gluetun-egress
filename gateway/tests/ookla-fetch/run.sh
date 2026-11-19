@@ -47,6 +47,7 @@ controler() { # $1=cas $2=attendu $3=fragment du journal attendu $4...=membres
 	: >"$journal"
 	rm -rf "$dossier_temporaire/sortie" && mkdir "$dossier_temporaire/sortie"
 	creer_archive "$dossier_temporaire/a.tgz" "$@"
+	OOKLA_SHA256=$(sha256sum <"$dossier_temporaire/a.tgz" | cut -d ' ' -f 1)
 	check_speedtest_archive "$dossier_temporaire/a.tgz" "$dossier_temporaire/sortie" >/dev/null 2>&1
 	verifier "$cas-code" "$attendu" "$?"
 	grep -q "$fragment" "$journal" && verifier "$cas-raison" ok ok || verifier "$cas-raison" "$fragment" "$(cat "$journal")"
@@ -60,6 +61,18 @@ controler "chemin-parent" 1 "chemin absolu ou « .. »" "speedtest|f|$elf_assez_
 controler "lien-symbolique" 1 "pas un fichier ordinaire" "speedtest|l|/etc/passwd" "bourrage|f|$dossier_temporaire/script"
 controler "pas-elf" 1 "pas un exécutable ELF" "speedtest|f|$dossier_temporaire/script"
 controler "version-inattendue" 1 "version annoncée" "speedtest|f|$elf_assez_gros"
+
+controler_somme() { # $1=cas $2=somme donnée au script (vide : aucune) $3=fragment du journal attendu
+	: >"$journal"
+	rm -rf "$dossier_temporaire/sortie" && mkdir "$dossier_temporaire/sortie"
+	creer_archive "$dossier_temporaire/a.tgz" "speedtest|f|$elf_assez_gros"
+	OOKLA_SHA256=$2
+	check_speedtest_archive "$dossier_temporaire/a.tgz" "$dossier_temporaire/sortie" >/dev/null 2>&1
+	verifier "$1-code" 1 "$?"
+	grep -q "$3" "$journal" && verifier "$1-raison" ok ok || verifier "$1-raison" "$3" "$(cat "$journal")"
+}
+controler_somme "somme-absente" "" "aucune somme SHA-256"
+controler_somme "somme-differente" "0000000000000000000000000000000000000000000000000000000000000000" "somme SHA-256 reçue"
 
 # fetch_speedtest : un faux wget compte ses appels
 mkdir "$dossier_temporaire/faux"
