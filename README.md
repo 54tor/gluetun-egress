@@ -513,7 +513,7 @@ cause rien : sans Gluetun, rien ne sort (`unreachable`, réseau `internal`).
   sortant par un autre bridge. Essai du 2026-10-14 : 0 paquet sorti sur 8 essais (5 démarrages, 3 redémarrages), contre
   5 à 50 paquets sans la règle dans les 2 essais témoins ; 40 paquets jetés au compteur ; les Gluetun ne sont pas
   touchés, leur trafic légitime ne traverse jamais ce chemin. La jumelle IPv6 (`ip6tables`, préfixe ULA) est posée
-  par le même script, mais n'a pas été éprouvée sur un vrai hôte, faute de fuite v6 à fermer.
+  par le même script, et a été éprouvée sur un hôte réel le 2026-11-19 (pose, compteur de `DOCKER-USER` et retrait par `ip6tables`) ; la fermeture de la fuite au démarrage d'un Gluetun n'a pas été mesurée en IPv6, faute de fuite v6 à fermer.
 
   ```sh
   iptables -I DOCKER-USER -s 172.30.0.0/16 ! -o vpngw+ -j DROP
