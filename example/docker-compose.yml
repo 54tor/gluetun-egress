@@ -51,7 +51,7 @@ services:
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24,fd30:20::/64
-      VPN_CHECK_NAME: vpn1              # nom du tunnel dans /run/gateway/up (rang dans VPN_IPS du gateway)
+      VPN_CHECK_NAME: vpn2              # nom du tunnel dans /run/gateway/up (rang dans VPN_IPS du gateway)
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
       VPN_CHECK_FAST_START: ${VPN_CHECK_FAST_START:-1}
       VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
@@ -76,7 +76,7 @@ services:
       TZ: ${TZ}
       # wgentryN (frontend) et le gateway (vpn-gateway) vivent derrière cette pile : leurs réseaux restent joignables.
       FIREWALL_OUTBOUND_SUBNETS: 172.30.10.0/24,172.30.20.0/24,fd30:20::/64
-      VPN_CHECK_NAME: vpn2
+      VPN_CHECK_NAME: vpn1
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
       VPN_CHECK_FAST_START: ${VPN_CHECK_FAST_START:-1}
       VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
@@ -194,9 +194,9 @@ services:
       ALLOW_OUT: ""         # ex. "172.30.20.20:6379" : un service du LAN que l'application appelle
       LAN_SUBNET: 172.30.20.0/24
       INGRESS_IP: 172.30.20.10
-      VPN_IPS: 172.30.20.11 172.30.20.12 172.30.20.13   # ordre = priorité (nord, proton, custom)
+      VPN_IPS: 172.30.20.12 172.30.20.11 172.30.20.13   # ordre = priorité (gluetun2, gluetun1, custom)
       # IPv6 : l'adresse de chaque Gluetun qui en a une, dans le même ordre (ici les deux premiers ; custom n'en a pas).
-      VPN_IPS6: fd30:20::11 fd30:20::12
+      VPN_IPS6: fd30:20::12 fd30:20::11
       LAN_SUBNET6: fd30:20::/64
       PROBE_URLS6: ${PROBE_URLS6}
       PROBE_URLS: ${PROBE_URLS}
