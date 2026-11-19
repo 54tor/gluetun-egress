@@ -153,7 +153,7 @@ up_mbps=
 # Renseigne latency (ms) et mbps ; up_mbps (Ookla seulement) reste vide quand la mesure HTTP n'envoie rien. Ookla : bandwidth est en octets par seconde, ping.latency en millisecondes.
 measure_with_http() {
 	t0=$(now_ms)
-	wget -q -T 5 -O /dev/null https://9.9.9.9/ || reject "9.9.9.9 muet"
+	wget -q -T 5 -O /dev/null https://1.1.1.1/cdn-cgi/trace || reject "1.1.1.1 muet"
 	latency=$(( $(now_ms) - t0 ))
 	[ $latency -le "$MAX_LATENCY_MS" ] || reject "latence ${latency} ms > ${MAX_LATENCY_MS} ms"
 
@@ -229,7 +229,7 @@ measure_with_ookla() {
 		return
 	fi
 
-	wget -q -T 5 -O /dev/null https://9.9.9.9/ || reject "9.9.9.9 muet"
+	wget -q -T 5 -O /dev/null https://1.1.1.1/cdn-cgi/trace || reject "1.1.1.1 muet"
 	for url in $URLS; do
 		wget -q -T 10 -O /dev/null "$url" || reject "$url muet"
 	done
