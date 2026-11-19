@@ -135,6 +135,7 @@ L'exemple ci-dessus est un exemple : l'ordre Nord, Proton, custom n'a de sens qu
 | `gateway/vpn-check.sh` | Sonde de santé des Gluetun (débit, latence, remplacement du serveur). Livrée dans l'image, déposée dans le volume `gateway-state` |
 | `gluetun/post-rules-N.txt` | Forwarding + NAT gateway → `tun0` dans le Gluetun N (priorité N) |
 | `host/vpngw-firewall.sh`, `.service`, `vpngw.conf.example` | Service hôte : règle `DOCKER-USER` contre la fuite au démarrage d'un Gluetun (§4.6) |
+| `tools/set-addressing.sh` | Change le plan d'adressage de toute la pile d'un coup (§7) |
 | `example/docker-compose.yml` | Une pile complète d'exemple : 3 Gluetun, 3 `wgentry` (wireproxy, un tunnel WireGuard vers le relais par Gluetun), Caddy, gateway, application |
 | `example/.env.example` | Modèle de `.env` de l'exemple |
 | `example/caddy/Caddyfile` | Site `:80` Caddy → `http://172.30.20.2:APP_PORT`, confiance aux Gluetun (`X-Forwarded-For`) |
@@ -790,6 +791,45 @@ api http://127.0.0.1:8000/v1/publicip/ip                      # pays et ville ef
 5. `docker compose up -d --build`.
 
 Rappel : le 4ᵉ `nameserver` sera ignoré par les resolvers (limite de 3).
+
+### Changer le plan d'adressage
+
+`tools/set-addressing.sh <préfixe frontend> <préfixe vpn-gateway> [préfixe ULA|-] [nom de pile]` réécrit d'un coup les quatre endroits du plan
+(compose, gateway, post-rules, Caddyfile), ainsi que le modèle de `.env`, les modèles `wgentry`, la CI et `host/`. Les
+sous-réseaux restent des `/24` (IPv4) et un `/64` (ULA) ; seuls les trois premiers octets changent, les hôtes gardent leur rang
+(`.2` gateway, `.10` Caddy, `.11` et suivants les Gluetun).
+
+```sh
+tools/set-addressing.sh 10.50.1 10.50.2 fd50:2:1 blog
+```
+
+Le nom de pile (9 caractères, `a-z` et `0-9`) devient le nom du projet Compose, donc le préfixe des conteneurs (`blog-gateway-1`),
+et le pont `vpngw-blog`. Sans lui, la pile garde `vpnstack` et `vpngw-egress`.
+
+#### Plusieurs piles sur un même hôte
+
+Un dépôt (une copie) par pile, chacune réglée par `tools/set-addressing.sh` avec **ses propres plages et son propre nom** :
+deux piles ne peuvent partager ni un sous-réseau, ni un nom de projet, ni un pont. Le script refuse une plage déjà prise par un
+réseau Docker (comparaison exacte des `/24` ; une plage plus large qui recouvre la vôtre n'est pas détectée).
+Rien d'autre ne se partage : les tables `nftables` du gateway vivent dans le namespace de chaque pile, aucun port n'est publié sur
+l'hôte, les volumes sont propres au projet. Côté hôte, une seule règle par pile dans `/etc/gluetun-egress/vpngw.conf`, une ligne
+chacune. Deux limites : **une clé WireGuard ne sert qu'une pile à la fois** (un fournisseur la refuse sur deux appareils), et
+chaque pile qui lance `vpn-check.sh` avec le moteur `ookla` sature ses tunnels pendant le test : décaler leur
+`VPN_CHECK_RECHECK_SECONDS`.
+
+Essai du 2026-11-19, deux piles en parallèle (`stka` en `10.61.x`, `stkb` en `10.62.x`, une clé Proton chacune) : sorties par
+des IP distinctes, ponts `vpngw-stka` et `vpngw-stkb` avec une règle hôte chacun, aucun accès d'une pile à l'autre (application ou
+Gluetun vers le Caddy ou le gateway de l'autre), redémarrer `gluetun1` et le gateway de A laisse B inchangé (même IP de sortie), et
+`set-addressing.sh` refuse pour B la plage de A, déjà prise par un réseau Docker. Les deux piles tournaient sans `wgentry`.
+
+- Préfixes privés seulement (10/8, 172.16/12, 192.168/16, ULA `fc00::/7`), `frontend` différent de `vpn-gateway`, sans
+  recouvrement avec un réseau Docker existant (`docker network ls`, puis `docker network inspect`).
+- Sans recouvrement avec les autres piles de l'hôte : le script le contrôle avec `docker network ls`.
+- Le README n'est pas réécrit : il décrit les valeurs d'origine. `tools/addressing.env` garde les valeurs courantes ; relancer
+  avec les mêmes valeurs ne change rien.
+- `host/vpngw.conf.example` suit le sous-réseau `vpn-gateway` ; reporter la ligne dans `/etc/gluetun-egress/vpngw.conf` et
+  relancer `systemctl restart vpngw-firewall` (§4.6).
+- Après changement : `docker compose config -q` dans `example/`, puis `sh tools/tests/addressing/run.sh`.
 
 ### Redémarrages
 

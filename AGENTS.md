@@ -32,7 +32,7 @@ sous-réseau ni un port seul. Toute demande plus large se refuse ou s'arbitre ex
 
 Le plan d'adressage (`172.30.10.0/24` frontend, `172.30.20.0/24` vpn-gateway, `fd30:20::/64` ULA du vpn-gateway)
 est écrit à **quatre endroits** : `example/docker-compose.yml`, `gateway/*`, `gluetun/post-rules-*.txt`,
-`example/caddy/`. Le changer, c'est changer les quatre.
+`example/caddy/`. Le changer à la main, c'est changer les quatre ; `tools/set-addressing.sh` le fait d'un coup.
 
 ## Avant de rendre un changement
 
@@ -44,6 +44,9 @@ sh gateway/tests/watch-port-forward/run.sh
 sh gateway/tests/probe-log/run.sh
 sh gateway/tests/vpn-check-measure/run.sh
 sh gluetun/tests/post-rules/run.sh
+sh host/tests/firewall/run.sh
+sh tools/tests/addressing/run.sh
+sh tools/lint.sh
 ```
 
 La syntaxe de `rules.nft` se contrôle dans l'image, avec `nft -c` et des `ALLOW_IN` / `ALLOW_OUT` vides puis
