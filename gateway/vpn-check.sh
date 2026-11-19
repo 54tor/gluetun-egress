@@ -67,6 +67,18 @@ validation_is_still_valid() {
 
 validation_is_still_valid && exit 0
 
+# Démarrage rapide : le tunnel est déclaré sain dès que la sonde native passe, la mesure et les remplacements de serveur
+# se font ensuite en tâche de fond (un remplacement coupe brièvement le tunnel : les dépendants sont relancés).
+FAST_START=${VPN_CHECK_FAST_START:-1}
+MEASURE_PID=$STATE.measure_pid
+if [ "$FAST_START" = 1 ] && [ -z "$VPN_CHECK_IN_BACKGROUND" ]; then
+	kill -0 "$(cat $MEASURE_PID 2>/dev/null)" 2>/dev/null || {
+		VPN_CHECK_IN_BACKGROUND=1 setsid sh "$0" >/dev/null 2>&1 </dev/null &
+		echo $! >$MEASURE_PID
+	}
+	exit 0
+fi
+
 # /proc/uptime : la date de busybox ne donne pas les millisecondes.
 now_ms() { awk '{ printf "%d", $1 * 1000 }' /proc/uptime; }
 

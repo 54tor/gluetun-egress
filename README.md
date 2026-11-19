@@ -215,6 +215,7 @@ cp .env.example .env && chmod 600 .env
 | `PROBE_URLS` | `https://9.9.9.9/ https://8.8.8.8/` | Cibles des sondes, par IP (aucune dépendance DNS). Une seule réponse suffit, quel que soit le code HTTP |
 | `EGRESS_MODE` | `failover` | `failover` : le premier VPN en vie porte tout. `balance-dest` : répartition entre tous les VPN en vie, une destination gardant le même VPN (poser `EGRESS_HASH_POLICY=0`). `balance-flow` : répartition par connexion, l'IP de sortie varie d'une connexion à l'autre (`EGRESS_HASH_POLICY=1`). Un VPN mort est retiré de la route à `FAIL_THRESHOLD` ; ses connexions meurent. |
 | `PROBE_INTERVAL` | `5` | Secondes entre deux cycles de sondes |
+| `PROBE_INTERVAL_DOWN` | `1` | Secondes entre deux cycles tant qu'aucun VPN n'est validé en IPv4 : la première sortie arrive après `RISE_THRESHOLD` secondes au lieu de `RISE_THRESHOLD × PROBE_INTERVAL` |
 | `PROBE_TIMEOUT` | `4` | Timeout de chaque requête de sonde |
 | `FAIL_THRESHOLD` | `3` | Échecs consécutifs avant de déclarer un VPN mort |
 | `LOG_REMINDER` | `600` | Secondes entre deux rappels dans le journal d'un VPN qui reste hors service : le gateway journalise une ligne quand un VPN change d'état (hors service, revenu), pas une par sonde |
@@ -599,6 +600,7 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_OOKLA_URL` | `https://install.speedtest.net/app/cli/ookla-speedtest-<version>-linux-x86_64.tgz` (HTTPS obligatoire) |
 | `VPN_CHECK_OOKLA_RETRY_SECONDS` | `3600` (délai avant de retenter un téléchargement ou un contrôle en échec) |
 | `VPN_CHECK_RECHECK_SECONDS` | `0` (jamais : un serveur validé n'est pas retesté tant que l'IP ne change pas) |
+| `VPN_CHECK_FAST_START` | `1` : le Gluetun est déclaré sain dès que sa sonde native passe, sans attendre le speedtest ; la mesure et les remplacements de serveur se font ensuite en tâche de fond (un remplacement coupe brièvement le tunnel, les dépendants sont relancés). `0` : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé |
 | `VPN_CHECK_NAME` | `vpn1`, `vpn2`… : le nom du tunnel côté gateway (rang dans `VPN_IPS`), requis pour le retest |
 
 Câblage (pas à pas au §3.2.1) : `vpn-check.sh` est livré **dans l'image du gateway**, qui le dépose à chaque

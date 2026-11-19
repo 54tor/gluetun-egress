@@ -17,6 +17,7 @@ LAN_SUBNET6=${LAN_SUBNET6:-fc00::/7}
 # une destination gardant le même VPN. balance-flow : répartition par connexion (l'IP de sortie varie d'une connexion à l'autre).
 EGRESS_MODE=${EGRESS_MODE:-failover}
 PROBE_INTERVAL=${PROBE_INTERVAL:-5}
+PROBE_INTERVAL_DOWN=${PROBE_INTERVAL_DOWN:-1}
 PROBE_TIMEOUT=${PROBE_TIMEOUT:-4}
 FAIL_THRESHOLD=${FAIL_THRESHOLD:-3}
 RISE_THRESHOLD=${RISE_THRESHOLD:-3}
@@ -231,5 +232,7 @@ while :; do
 		fi
 	done
 
-	sleep "$PROBE_INTERVAL" & wait $!
+	# Sans aucun VPN validé, on resonde vite : la première sortie n'attend pas RISE_THRESHOLD × PROBE_INTERVAL.
+	if [ "$active4" = none ]; then attente=$PROBE_INTERVAL_DOWN; else attente=$PROBE_INTERVAL; fi
+	sleep "$attente" & wait $!
 done
