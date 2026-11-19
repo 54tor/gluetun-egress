@@ -46,6 +46,15 @@ TRIES=$STATE.tries
 ip=$(cat /tmp/gluetun/ip 2>/dev/null)
 [ -n "$ip" ] || { echo "IP publique pas encore connue"; exit 1; }
 
+# Le fichier de mesure survit à un changement de serveur (volume persistant) : tant que le nouveau n'est pas validé, il garde l'ancienne
+# adresse publique, et un consommateur de tunnels.json en déduit un pays périmé. À chaque changement d'IP on le réécrit avec la nouvelle, sans mesure.
+publish_ip_without_measure() {
+	measured_ip=$(awk 'NR == 1 { print $4 }' "$MEASURE_FILE" 2>/dev/null)
+	[ "$measured_ip" = "$ip" ] && return 0
+	{ echo "- - - $ip" >"$MEASURE_FILE.tmp" && mv "$MEASURE_FILE.tmp" "$MEASURE_FILE"; } 2>/dev/null || true
+}
+publish_ip_without_measure
+
 # Le gateway publie dans GATEWAY_UP_FILE les tunnels en vie. Sans fichier lisible ou sans nom de tunnel,
 # on ne peut pas prouver qu'un autre tunnel prend le relais : pas de retest, donc jamais de coupure.
 another_tunnel_is_up() {
