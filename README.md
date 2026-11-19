@@ -146,7 +146,7 @@ Les chemins de ce document qui commencent par `docker-compose.yml`, `.env*` ou `
 ### Image publiée
 
 Chaque tag `vX.Y.Z` publie `ghcr.io/54tor/gluetun-egress-gateway:X.Y.Z` (et `X.Y`, `X`, `latest`), construite par
-`.github/workflows/image.yml` ; un push sur `main` publie `edge`. Pour l'utiliser à la place de `build: ../gateway`,
+`.github/workflows/image.yml` ; un push sur `main` publie `edge`. Version courante : **1.0.0**. Pour l'utiliser à la place de `build: ../gateway`,
 mettre `image: ghcr.io/54tor/gluetun-egress-gateway:latest` dans le service `gateway`.
 
 **Construire l'image soi-même** (dépôt : <https://github.com/54tor/gluetun-egress>) :
