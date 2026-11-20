@@ -365,9 +365,11 @@ Puis, en boucle toutes les `PROBE_INTERVAL` secondes :
   les autres `PROBE_URLS`). Grâce à l'UID, chaque sonde passe **par son VPN**, quelle que soit la
   route active. Le succès prouve que le Gluetun est joignable, que son tunnel fonctionne et
   qu'Internet répond à travers lui (Gluetun ne forwarde que vers `tun0`).
-- En cas d'échec, un `ping` du Gluetun distingue dans les logs :
-  `injoignable`, `joignable mais tunnel trop lent` (timeout `PROBE_TIMEOUT`) et
-  `joignable mais aucune sortie Internet via son tunnel`.
+- **Un `ping` du Gluetun passe avant les URLs** (deux essais : un paquet perdu ne vaut pas une
+  panne). Sans réponse, le VPN est compté en échec tout de suite (`injoignable`), sans attendre le
+  timeout de chaque URL : un conteneur arrêté est détecté en `FAIL_THRESHOLD × (PROBE_INTERVAL + 2 s)`.
+  Un Gluetun qui répond au ping mais dont l'URL échoue est journalisé `joignable mais tunnel trop
+  lent` (timeout `PROBE_TIMEOUT`) ou `joignable mais aucune sortie Internet via son tunnel`.
 - **Hystérésis** : un VPN passe *down* après `FAIL_THRESHOLD` échecs consécutifs et *up* après
   `RISE_THRESHOLD` succès consécutifs.
 - **Choix** : en `failover`, le premier VPN *up* dans l'ordre de `VPN_IPS` ; en `balance-*`, tous les VPN *up* en route multipath à poids égal (`/run/gateway/active` vaut alors `vpn1,vpn2`) ; aucun → `unreachable`.
@@ -747,7 +749,8 @@ recrée pas. Vérifier sur le relais : `wg show wg0 latest-handshakes` (poignée
 | Dernier VPN en panne → `none` | 43 s |
 | Retour d'un VPN prioritaire | 9-39 s (plus long si Gluetun a dû se reconnecter à un nouveau serveur) |
 
-Délai de détection ≈ `FAIL_THRESHOLD × (PROBE_INTERVAL + nombre de PROBE_URLS × PROBE_TIMEOUT)`.
+Délai de détection d'un tunnel lent ou muet (Gluetun joignable) ≈ `FAIL_THRESHOLD × (PROBE_INTERVAL + nombre de PROBE_URLS × PROBE_TIMEOUT)`.
+Un conteneur arrêté ou un réseau coupé ne répond pas au ping : `FAIL_THRESHOLD × (PROBE_INTERVAL + 2 s)`.
 Pour basculer plus vite : baisser `FAIL_THRESHOLD` ou `PROBE_TIMEOUT`, au prix de bascules
 intempestives sur un VPN lent.
 

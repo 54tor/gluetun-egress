@@ -54,6 +54,7 @@ ipf() { f=$1; shift; if [ "$f" = 6 ]; then ip -6 "$@"; else ip "$@"; fi; }
 
 log() { echo "$(date -Iseconds) gateway: $*"; }
 . /usr/local/bin/probe-log.sh
+. /usr/local/bin/probe.sh
 . /usr/local/bin/tunnels-json.sh
 
 restart_dependents() { # $1=n° du VPN revenu après une panne
@@ -128,26 +129,6 @@ mkdir -p "$raisons_des_sondes"
 # démarrage (mv : un Gluetun ne lit jamais un fichier à moitié écrit).
 cp /usr/local/share/gateway/vpn-check.sh /run/gateway/.vpn-check.sh.tmp
 mv /run/gateway/.vpn-check.sh.tmp /run/gateway/vpn-check.sh
-
-probe() { # $1=uid $2=ip gluetun $3=nom $4=famille -> 0 si Internet joignable à travers CE tunnel
-	rc=0
-	if [ "$4" = 6 ]; then urls=$PROBE_URLS6 pingopt=-6; else urls=$PROBE_URLS pingopt=-4; fi
-	for url in $urls; do
-		# Pas de `-f` : toute réponse HTTP (même 404) prouve que le tunnel porte du trafic.
-		# `-g` : sans globbing, les crochets d'une adresse IPv6 littérale restent une adresse.
-		rc=0
-		su-exec "$1:$1" curl -g -sS -o /dev/null --max-time "$PROBE_TIMEOUT" "$url" 2>/dev/null || rc=$?
-		[ "$rc" = 0 ] && return 0
-	done
-	if ! ping $pingopt -c1 -W1 "$2" >/dev/null 2>&1; then
-		echo "injoignable (conteneur arrêté ou réseau vpn-gateway)" > "$raisons_des_sondes/$3-v$4"
-	elif [ "$rc" = 28 ]; then
-		echo "joignable mais tunnel trop lent (aucune réponse en ${PROBE_TIMEOUT}s)" > "$raisons_des_sondes/$3-v$4"
-	else
-		echo "joignable mais aucune sortie Internet via son tunnel" > "$raisons_des_sondes/$3-v$4"
-	fi
-	return 1
-}
 
 # /run/gateway/active : le VPN actif en IPv4 (contrat historique) ; active6 : celui de l'IPv6.
 for f in $FAMILIES; do
