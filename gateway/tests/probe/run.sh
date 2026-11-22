@@ -34,8 +34,11 @@ export DOSSIER_STUBS
 PATH="$dossier_temporaire/bin:$PATH"
 raisons_des_sondes=$dossier_temporaire/raisons
 mkdir "$raisons_des_sondes"
+# shellcheck disable=SC2034 # lues par probe.sh, sourcé juste après
 PROBE_URLS="https://v4-a/ https://v4-b/"
+# shellcheck disable=SC2034
 PROBE_URLS6="https://[v6]/"
+# shellcheck disable=SC2034
 PROBE_TIMEOUT=4
 # shellcheck disable=SC1091
 . "$dossier_du_test/../../probe.sh"
