@@ -222,7 +222,7 @@ cp .env.example .env && chmod 600 .env
 | `LOG_REMINDER` | `600` | Secondes entre deux rappels dans le journal d'un VPN qui reste hors service : le gateway journalise une ligne quand un VPN change d'état (hors service, revenu), pas une par sonde |
 | `RISE_THRESHOLD` | `3` | Succès consécutifs avant de le réintégrer |
 | `VPN_CHECK_APIKEY` | — | Clé d'API du serveur de contrôle de chaque Gluetun, présentée par `vpn-check.sh` pour changer de serveur. Obligatoire dans l'exemple. Voir §3.2.1 |
-| `VPN_CHECK_RECHECK_SECONDS` | `0` | Retest périodique du débit et de la latence d'un serveur VPN, en secondes (`0` : jamais, un serveur validé n'est retesté que si l'IP change). Ex. `1800`. Voir §3.2.1 |
+| `VPN_CHECK_RECHECK_SECONDS` | `3600` | Retest périodique du débit et de la latence d'un serveur VPN, en secondes (`0` : jamais, un serveur validé n'est retesté que si l'IP change). Ex. `1800`. Voir §3.2.1 |
 
 ### 3.2 `.env.vpnN`
 
@@ -284,7 +284,7 @@ Facultatif mais recommandé : il écarte les serveurs lents avant que la pile d�
    Dans l'exemple, la clé vient de `VPN_CHECK_APIKEY` du `.env`, obligatoire.
 4. **Nom du tunnel** : `VPN_CHECK_NAME=vpn1` sur le premier Gluetun de `VPN_IPS`, `vpn2` sur le deuxième, etc.
    Requis pour le retest, inutile sans.
-5. **Retest** (facultatif) : `VPN_CHECK_RECHECK_SECONDS=1800` sur chaque Gluetun, ou dans le `.env` si le compose le
+5. **Retest** (actif par défaut, 3600) : `VPN_CHECK_RECHECK_SECONDS=1800` sur chaque Gluetun, ou dans le `.env` si le compose le
    transmet comme celui de l'exemple.
 
 `example/docker-compose.yml` est câblé ainsi. Seuils, mémoire des IP recalées et garde-fou du dernier tunnel : §4.8.
@@ -605,7 +605,7 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_OOKLA_URL` | `https://install.speedtest.net/app/cli/ookla-speedtest-<version>-linux-x86_64.tgz` (HTTPS obligatoire) |
 | `VPN_CHECK_OOKLA_SHA256` | somme SHA-256 de l'archive, livrée pour la `1.2.0` ; **obligatoire pour toute autre version**, sans quoi le binaire est refusé |
 | `VPN_CHECK_OOKLA_RETRY_SECONDS` | `3600` (délai avant de retenter un téléchargement ou un contrôle en échec) |
-| `VPN_CHECK_RECHECK_SECONDS` | `0` (jamais : un serveur validé n'est pas retesté tant que l'IP ne change pas) |
+| `VPN_CHECK_RECHECK_SECONDS` | `3600` (`0` : jamais, un serveur validé n'est pas retesté tant que l'IP ne change pas) |
 | `VPN_CHECK_FAST_START` | `1` : le Gluetun est déclaré sain dès que sa sonde native passe, sans attendre le speedtest ; la mesure et les remplacements de serveur se font ensuite en tâche de fond (un remplacement coupe brièvement le tunnel, les dépendants sont relancés). `0` : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé |
 | `VPN_CHECK_NAME` | `vpn1`, `vpn2`… : le nom du tunnel côté gateway (rang dans `VPN_IPS`), requis pour le retest |
 

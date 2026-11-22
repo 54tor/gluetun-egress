@@ -12,8 +12,8 @@ MAX_REROLLS=${VPN_CHECK_MAX_REROLLS:-8}
 URLS=${VPN_CHECK_URLS:-https://www.google.com/generate_204 https://www.wikipedia.org/}
 BYTES=${VPN_CHECK_BYTES:-10485760}
 SPEED_URL=${VPN_CHECK_SPEED_URL:-https://proof.ovh.net/files/10Mb.dat}
-# 0 : un serveur validé n'est jamais retesté. Sinon, retest toutes les N secondes, tant qu'un autre tunnel est en vie.
-RECHECK_SECONDS=${VPN_CHECK_RECHECK_SECONDS:-0}
+# 0 : un serveur validé n'est jamais retesté. Défaut 3600 : retest toutes les N secondes, tant qu'un autre tunnel est en vie.
+RECHECK_SECONDS=${VPN_CHECK_RECHECK_SECONDS:-3600}
 TUNNEL_NAME=${VPN_CHECK_NAME:-}
 # 1 : un serveur dont tun0 n'a pas d'adresse IPv6 globale est recalé (Linux retire l'IPv6 d'une interface dont le MTU, découvert
 # par Gluetun, est sous 1280). 0 (défaut) : aucun contrôle, pour un fournisseur sans IPv6. À poser sur le Gluetun concerné.
