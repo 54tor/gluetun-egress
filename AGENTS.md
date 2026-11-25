@@ -44,6 +44,7 @@ sh gateway/tests/watch-port-forward/run.sh
 sh gateway/tests/probe-log/run.sh
 sh gateway/tests/probe/run.sh
 sh gateway/tests/vpn-check-measure/run.sh
+sh gateway/tests/background-measure/run.sh
 sh gluetun/tests/post-rules/run.sh
 sh host/tests/firewall/run.sh
 sh tools/tests/addressing/run.sh
