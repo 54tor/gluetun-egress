@@ -8,7 +8,8 @@
 
 MIN_MBPS=${VPN_CHECK_MIN_MBPS:-20}
 MAX_LATENCY_MS=${VPN_CHECK_MAX_LATENCY_MS:-300}
-LATENCY_URL=${VPN_CHECK_LATENCY_URL:-https://1.1.1.1/cdn-cgi/trace}
+# Essayées dans l'ordre ; la première qui répond donne la latence.
+LATENCY_URLS=${VPN_CHECK_LATENCY_URLS:-https://1.1.1.1/cdn-cgi/trace https://8.8.8.8/ https://9.9.9.9/}
 MAX_REROLLS=${VPN_CHECK_MAX_REROLLS:-8}
 URLS=${VPN_CHECK_URLS:-https://www.google.com/generate_204 https://www.wikipedia.org/}
 BYTES=${VPN_CHECK_BYTES:-10485760}
@@ -44,9 +45,9 @@ BAD=$STATE.bad
 PASSED=$STATE.passed
 PASSED_AT=$STATE.passed_at
 TRIES=$STATE.tries
-
 # IP déjà mesurée par ce Gluetun : borne le retest « mesure absente » à un seul par IP, même si le fichier de mesure reste illisible ou non inscriptible.
 MEASURED=$STATE.measured
+
 /gluetun-entrypoint healthcheck >/dev/null 2>&1 || { echo "tunnel indisponible"; exit 1; }
 
 ip=$(cat /tmp/gluetun/ip 2>/dev/null)
@@ -73,8 +74,8 @@ another_tunnel_is_up() {
 
 # Vrai tant que cette IP n'a pas été mesurée et que le fichier de mesure n'a ni latence chiffrée ni l'IP courante (« - - - <ip> » ne compte pas comme une mesure).
 measure_is_missing_for_this_ip() {
-	! awk -v ip="$ip" 'NR == 1 { found = ($1 ~ /^[0-9]+$/ && $4 == ip) } END { exit !found }' "$MEASURE_FILE" 2>/dev/null
 	[ "$(cat $MEASURED 2>/dev/null)" != "$ip" ] || return 1
+	! awk -v ip="$ip" 'NR == 1 { found = ($1 ~ /^[0-9]+$/ && $4 == ip) } END { exit !found }' "$MEASURE_FILE" 2>/dev/null
 }
 
 validation_is_still_valid() {
@@ -163,9 +164,12 @@ ip_is_recently_bad && reject "déjà recalé il y a moins de ${BAD_TTL_SECONDS} 
 up_mbps=
 # Renseigne latency (ms) et mbps ; up_mbps (Ookla seulement) reste vide quand la mesure HTTP n'envoie rien. Ookla : bandwidth est en octets par seconde, ping.latency en millisecondes.
 measure_with_http() {
-	t0=$(now_ms)
-	wget -q -T 5 -O /dev/null "$LATENCY_URL" || reject "$LATENCY_URL muet"
-	latency=$(( $(now_ms) - t0 ))
+	latency=
+	for url in $LATENCY_URLS; do
+		t0=$(now_ms)
+		if wget -q -T 5 -O /dev/null "$url"; then latency=$(( $(now_ms) - t0 )); break; fi
+	done
+	[ -n "$latency" ] || reject "aucune cible de latence ne répond ($LATENCY_URLS)"
 	[ $latency -le "$MAX_LATENCY_MS" ] || reject "latence ${latency} ms > ${MAX_LATENCY_MS} ms"
 
 	for url in $URLS; do
@@ -215,9 +219,12 @@ check_speedtest_archive() {
 	echo "$version_line" | grep -q "Speedtest by Ookla $OOKLA_VERSION" || { log "CLI Ookla refusé : version annoncée « $version_line », attendue $OOKLA_VERSION"; return 1; }
 }
 
-# Un tunnel qui vient de monter n'a pas toujours de route ni de DNS : le téléchargement attend que LATENCY_URL réponde.
+# Un tunnel qui vient de monter n'a pas toujours de route ni de DNS : le téléchargement attend qu'une cible de LATENCY_URLS réponde.
 tunnel_has_internet() {
-	wget -q -T 5 -O /dev/null "$LATENCY_URL"
+	for url in $LATENCY_URLS; do
+		wget -q -T 5 -O /dev/null "$url" && return 0
+	done
+	return 1
 }
 
 # 0 si $SPEEDTEST_BIN est prêt. Le téléchargement passe par le tunnel (HTTPS, certificats vérifiés par wget, aucune redirection suivie),
@@ -273,6 +280,6 @@ log "validé : ${latency} ms, ${mbps} Mbit/s${up_mbps:+, montant ${up_mbps} Mbit
 # Mesure lue par le gateway (tunnels.json) dans le volume propre à ce tunnel ; sans ce volume, l'écriture échoue sans conséquence.
 { echo "$latency $mbps $(date +%s) $ip $up_mbps" >"$MEASURE_FILE.tmp" && mv "$MEASURE_FILE.tmp" "$MEASURE_FILE"; } 2>/dev/null || true
 echo "$ip" >$PASSED
+echo "$ip" >$MEASURED
 date +%s >$PASSED_AT
 rm -f $TRIES
-echo "$ip" >$MEASURED

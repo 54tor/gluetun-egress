@@ -7,7 +7,7 @@ set -eu
 : "${APP_PORT:?}" "${LAN_SUBNET:?}" "${INGRESS_IP:?}" "${VPN_IPS:?}"
 ALLOW_IN=${ALLOW_IN:-}
 ALLOW_OUT=${ALLOW_OUT:-}
-PROBE_URLS=${PROBE_URLS:-https://9.9.9.9/ https://8.8.8.8/}
+PROBE_URLS=${PROBE_URLS:-https://1.1.1.1/ https://8.8.8.8/ https://9.9.9.9/}
 PROBE_URLS6=${PROBE_URLS6:-https://[2620:fe::fe]/ https://[2001:4860:4860::8888]/}
 # IPv6 facultative : VPN_IPS6 liste, dans le même ordre que VPN_IPS, l'adresse IPv6 de chaque Gluetun (les N6 premiers
 # seulement si certains VPN n'ont pas d'IPv6). Vide : aucune sortie IPv6, la table nftables la refuse.
