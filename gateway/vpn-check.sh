@@ -45,6 +45,8 @@ PASSED=$STATE.passed
 PASSED_AT=$STATE.passed_at
 TRIES=$STATE.tries
 
+# IP déjà mesurée par ce Gluetun : borne le retest « mesure absente » à un seul par IP, même si le fichier de mesure reste illisible ou non inscriptible.
+MEASURED=$STATE.measured
 /gluetun-entrypoint healthcheck >/dev/null 2>&1 || { echo "tunnel indisponible"; exit 1; }
 
 ip=$(cat /tmp/gluetun/ip 2>/dev/null)
@@ -69,9 +71,10 @@ another_tunnel_is_up() {
 	return 1
 }
 
-# Vrai tant que le fichier de mesure n'a ni latence chiffrée ni l'IP courante (« - - - <ip> » ne compte pas comme une mesure).
+# Vrai tant que cette IP n'a pas été mesurée et que le fichier de mesure n'a ni latence chiffrée ni l'IP courante (« - - - <ip> » ne compte pas comme une mesure).
 measure_is_missing_for_this_ip() {
 	! awk -v ip="$ip" 'NR == 1 { found = ($1 ~ /^[0-9]+$/ && $4 == ip) } END { exit !found }' "$MEASURE_FILE" 2>/dev/null
+	[ "$(cat $MEASURED 2>/dev/null)" != "$ip" ] || return 1
 }
 
 validation_is_still_valid() {
@@ -272,3 +275,4 @@ log "validé : ${latency} ms, ${mbps} Mbit/s${up_mbps:+, montant ${up_mbps} Mbit
 echo "$ip" >$PASSED
 date +%s >$PASSED_AT
 rm -f $TRIES
+echo "$ip" >$MEASURED
