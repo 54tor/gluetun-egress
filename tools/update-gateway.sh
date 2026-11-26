@@ -1,11 +1,10 @@
 #!/bin/sh
-# Met à jour le gateway sans toucher aux Gluetun ni aux services qui ne dépendent pas de son réseau : reconstruit l'image (service avec
-# « build: ») ou la télécharge (service avec « image: »), contrôle la syntaxe des scripts dans l'image neuve, recrée « gateway », puis
-# seulement les conteneurs qui partagent son réseau (network_mode: service:gateway) : Docker ne sait pas les rattacher à un nouveau
-# netns, ils sont recréés avec lui, quelques secondes. vpn-check.sh est redéposé dans gateway-state au démarrage du gateway : les
-# Gluetun l'utilisent dès leur contrôle suivant.
+# Met à jour vpn-check.sh chez les Gluetun SANS rien redémarrer : télécharge (ou reconstruit) l'image du gateway, en extrait vpn-check.sh,
+# contrôle sa syntaxe, puis l'écrit dans le volume gateway-state par le gateway en marche. Les Gluetun l'utilisent à leur contrôle suivant ;
+# le gateway, ses conteneurs fils (network_mode: service:gateway) et les Gluetun ne sont ni recréés ni relancés.
+# Ne couvre pas entrypoint.sh ni rules.nft : ils tournent dans le gateway, leur mise à jour exige de le recréer (donc ses fils).
 # Usage : update-gateway.sh [dossier-compose]   (défaut : example/ du dépôt s'il existe, sinon le dossier du script)
-# Sortie : une ligne par étape ; code de sortie 0 si le gateway est « healthy » après recréation.
+# Sortie : une ligne par étape ; code de sortie 0 si le script est déposé.
 set -eu
 
 dossier_script=$(cd "$(dirname "$0")" && pwd)
@@ -14,37 +13,21 @@ if [ -z "$dossier_compose" ]; then
 	dossier_compose=$dossier_script
 	[ ! -d "$dossier_script/../example" ] || dossier_compose=$dossier_script/../example
 fi
-delai_healthy_secondes=60
 cd "$dossier_compose"
 
-echo "== mise à jour de l'image"
+echo "== mise à jour de l'image (sans toucher aux conteneurs)"
 docker compose build gateway
-docker compose pull gateway 2>/dev/null || true
-
-echo "== contrôle de l'image"
+docker compose pull --ignore-buildable gateway 2>/dev/null || docker compose pull gateway 2>/dev/null || true
 image=$(docker compose config --images | grep -m1 -E '(^|/)[^/]*gateway(:|$)')
-for chemin in /usr/local/bin/entrypoint.sh /usr/local/bin/probe.sh /usr/local/share/gateway/vpn-check.sh; do
-	docker run --rm --entrypoint sh "$image" -n "$chemin"
-done
 
-ancien_gateway=$(docker compose ps -q gateway)
-projet=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$ancien_gateway")
-dependants=$(docker ps -q --filter "label=com.docker.compose.project=$projet" | while read -r conteneur; do
-	reseau=$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$conteneur")
-	case "$reseau" in "container:$ancien_gateway"*) docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$conteneur" ;; esac
-done)
+echo "== extraction et contrôle de vpn-check.sh"
+nouveau=$(mktemp)
+trap 'rm -f "$nouveau"' EXIT
+docker run --rm --entrypoint cat "$image" /usr/local/share/gateway/vpn-check.sh >"$nouveau"
+sh -n "$nouveau"
 
-echo "== recréation de gateway"
-docker compose up -d --no-deps --force-recreate gateway
-
-echo "== attente du healthcheck"
-fin=$(( $(date +%s) + delai_healthy_secondes ))
-while [ "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q gateway)")" != healthy ]; do
-	[ "$(date +%s)" -lt "$fin" ] || { echo "gateway pas healthy après ${delai_healthy_secondes} s" >&2; exit 1; }
-	sleep 2
-done
-echo "gateway healthy"
-
-echo "== recréation des conteneurs sur le réseau du gateway : $(echo $dependants)"
-# shellcheck disable=SC2086
-[ -z "$dependants" ] || docker compose up -d --no-deps --force-recreate $dependants
+echo "== dépôt dans le volume gateway-state par le gateway en marche"
+gateway=$(docker compose ps -q gateway)
+[ -n "$gateway" ] || { echo "gateway absent : rien à déposer" >&2; exit 1; }
+docker exec -i "$gateway" sh -c 'cat >/run/gateway/.vpn-check.sh.tmp && mv /run/gateway/.vpn-check.sh.tmp /run/gateway/vpn-check.sh' <"$nouveau"
+echo "vpn-check.sh déposé"
