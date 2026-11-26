@@ -8,6 +8,7 @@
 
 MIN_MBPS=${VPN_CHECK_MIN_MBPS:-20}
 MAX_LATENCY_MS=${VPN_CHECK_MAX_LATENCY_MS:-300}
+LATENCY_URL=${VPN_CHECK_LATENCY_URL:-https://1.1.1.1/cdn-cgi/trace}
 MAX_REROLLS=${VPN_CHECK_MAX_REROLLS:-8}
 URLS=${VPN_CHECK_URLS:-https://www.google.com/generate_204 https://www.wikipedia.org/}
 BYTES=${VPN_CHECK_BYTES:-10485760}
@@ -160,7 +161,7 @@ up_mbps=
 # Renseigne latency (ms) et mbps ; up_mbps (Ookla seulement) reste vide quand la mesure HTTP n'envoie rien. Ookla : bandwidth est en octets par seconde, ping.latency en millisecondes.
 measure_with_http() {
 	t0=$(now_ms)
-	wget -q -T 5 -O /dev/null https://1.1.1.1/cdn-cgi/trace || reject "1.1.1.1 muet"
+	wget -q -T 5 -O /dev/null "$LATENCY_URL" || reject "$LATENCY_URL muet"
 	latency=$(( $(now_ms) - t0 ))
 	[ $latency -le "$MAX_LATENCY_MS" ] || reject "latence ${latency} ms > ${MAX_LATENCY_MS} ms"
 
@@ -211,9 +212,9 @@ check_speedtest_archive() {
 	echo "$version_line" | grep -q "Speedtest by Ookla $OOKLA_VERSION" || { log "CLI Ookla refusé : version annoncée « $version_line », attendue $OOKLA_VERSION"; return 1; }
 }
 
-# Un tunnel qui vient de monter n'a pas toujours de route ni de DNS : le téléchargement attend que 1.1.1.1 réponde.
+# Un tunnel qui vient de monter n'a pas toujours de route ni de DNS : le téléchargement attend que LATENCY_URL réponde.
 tunnel_has_internet() {
-	wget -q -T 5 -O /dev/null https://1.1.1.1/cdn-cgi/trace
+	wget -q -T 5 -O /dev/null "$LATENCY_URL"
 }
 
 # 0 si $SPEEDTEST_BIN est prêt. Le téléchargement passe par le tunnel (HTTPS, certificats vérifiés par wget, aucune redirection suivie),
