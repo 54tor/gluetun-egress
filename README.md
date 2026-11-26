@@ -136,6 +136,7 @@ L'exemple ci-dessus est un exemple : l'ordre Nord, Proton, custom n'a de sens qu
 | `gluetun/post-rules-N.txt` | Forwarding + NAT gateway → `tun0` dans le Gluetun N (priorité N) |
 | `host/vpngw-firewall.sh`, `.service`, `vpngw.conf.example` | Service hôte : règle `DOCKER-USER` contre la fuite au démarrage d'un Gluetun (§4.6) |
 | `tools/set-addressing.sh` | Change le plan d'adressage de toute la pile d'un coup (§7) |
+| `tools/update-gateway.sh` | Reconstruit le gateway et le recrée avec ses conteneurs `network_mode: service:gateway`, sans toucher aux Gluetun, wgentry ni Caddy ; redépose `vpn-check.sh` chez les Gluetun |
 | `example/docker-compose.yml` | Une pile complète d'exemple : 3 Gluetun, 3 `wgentry` (wireproxy, un tunnel WireGuard vers le relais par Gluetun), Caddy, gateway, application |
 | `example/.env.example` | Modèle de `.env` de l'exemple |
 | `example/caddy/Caddyfile` | Site `:80` Caddy → `http://172.30.20.2:APP_PORT`, confiance aux Gluetun (`X-Forwarded-For`) |
