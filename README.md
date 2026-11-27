@@ -612,6 +612,7 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_RECHECK_SECONDS` | `3600` (`0` : jamais, un serveur validé n'est pas retesté tant que l'IP ne change pas) |
 | `VPN_CHECK_FAST_START` | `1` : le Gluetun est déclaré sain dès que sa sonde native passe, sans attendre le speedtest ; la mesure et les remplacements de serveur se font ensuite en tâche de fond (un remplacement coupe brièvement le tunnel, les dépendants sont relancés). `0` : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé |
 | `VPN_CHECK_REROLL_ONLY_IF_OTHER_UP` | `1` : un serveur recalé (débit, latence…) n'est remplacé que si un autre tunnel est en vie (exige `VPN_CHECK_NAME`) ; sinon il est gardé, et remplacé dès qu'un autre tunnel est établi. `0` : remplacé tout de suite |
+| `VPN_CHECK_REROLL_GRACE_SECONDS` | `300` : aucun remplacement de serveur pendant ce délai après le démarrage du gateway (le gateway dépose sa date dans `gateway-state/started`), pour ne pas couper un déploiement en cours. `0` : pas de délai |
 | `VPN_CHECK_NAME` | `vpn1`, `vpn2`… : le nom du tunnel côté gateway (rang dans `VPN_IPS`), requis pour le retest |
 
 Câblage (pas à pas au §3.2.1) : `vpn-check.sh` est livré **dans l'image du gateway**, qui le dépose à chaque

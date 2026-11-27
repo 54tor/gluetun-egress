@@ -137,6 +137,8 @@ for f in $FAMILIES; do
 done
 # /run/gateway/up : tous les VPN « up » en IPv4 (vpn1 vpn2…), lu par vpn-check.sh pour ne jamais recycler le dernier.
 : > /run/gateway/up
+# Date de démarrage : vpn-check.sh ne remplace aucun serveur pendant VPN_CHECK_REROLL_GRACE_SECONDS après elle.
+date +%s > /run/gateway/.started.tmp && mv /run/gateway/.started.tmp /run/gateway/started
 
 # Surveillance du port redirigé : un processus par Gluetun qui en a un (PORT_FORWARD_<n>), arrêté avec le gateway.
 surveillances=""
