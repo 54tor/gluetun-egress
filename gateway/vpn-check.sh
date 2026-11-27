@@ -21,6 +21,9 @@ TUNNEL_NAME=${VPN_CHECK_NAME:-}
 # par Gluetun, est sous 1280). 0 (défaut) : aucun contrôle, pour un fournisseur sans IPv6. À poser sur le Gluetun concerné.
 REQUIRE_IPV6=${VPN_CHECK_REQUIRE_IPV6:-0}
 GATEWAY_UP_FILE=/gateway-state/up
+# 1 (défaut) : un serveur recalé n'est remplacé que si un autre tunnel est en vie (un lien médiocre vaut mieux que
+# plus de lien du tout). Il reste recalé d'office et sera remplacé dès qu'un autre tunnel sera établi. 0 : remplacé tout de suite.
+REROLL_ONLY_IF_OTHER_UP=${VPN_CHECK_REROLL_ONLY_IF_OTHER_UP:-1}
 MEASURE_FILE=/gateway-measure/measure
 # Une IP recalée est recalée d'office, sans test, pendant ce délai (0 : aucune mémoire).
 BAD_TTL_SECONDS=${VPN_CHECK_BAD_TTL_SECONDS:-86400}
@@ -140,6 +143,10 @@ remember_bad_ip() {
 reject() {
 	# Un recalage d'office garde la date du recalage d'origine : sinon l'IP n'expirerait jamais.
 	ip_is_recently_bad || remember_bad_ip
+	if [ "$REROLL_ONLY_IF_OTHER_UP" = 1 ] && ! another_tunnel_is_up; then
+		log "recalé ($1), aucun autre tunnel en vie : serveur gardé, remplacé dès qu'un autre tunnel sera établi"
+		exit 1
+	fi
 	tries=$(( $(cat $TRIES 2>/dev/null || echo 0) + 1 ))
 	echo $tries >$TRIES
 	if [ $tries -gt "$MAX_REROLLS" ]; then

@@ -55,6 +55,7 @@ services:
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
       VPN_CHECK_FAST_START: ${VPN_CHECK_FAST_START:-1}
       VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
+      VPN_CHECK_REROLL_ONLY_IF_OTHER_UP: ${VPN_CHECK_REROLL_ONLY_IF_OTHER_UP:-1}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
     volumes:
       - gateway-state:/gateway-state:ro
@@ -80,6 +81,7 @@ services:
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
       VPN_CHECK_FAST_START: ${VPN_CHECK_FAST_START:-1}
       VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
+      VPN_CHECK_REROLL_ONLY_IF_OTHER_UP: ${VPN_CHECK_REROLL_ONLY_IF_OTHER_UP:-1}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
     volumes:
       - gateway-state:/gateway-state:ro
@@ -105,6 +107,7 @@ services:
       VPN_CHECK_RECHECK_SECONDS: ${VPN_CHECK_RECHECK_SECONDS:-0}
       VPN_CHECK_FAST_START: ${VPN_CHECK_FAST_START:-1}
       VPN_CHECK_ENGINE: ${VPN_CHECK_ENGINE:-http}
+      VPN_CHECK_REROLL_ONLY_IF_OTHER_UP: ${VPN_CHECK_REROLL_ONLY_IF_OTHER_UP:-1}
       VPN_CHECK_OOKLA_ACCEPT_LICENSE: ${VPN_CHECK_OOKLA_ACCEPT_LICENSE:-yes}
     volumes:
       - gateway-state:/gateway-state:ro
@@ -188,6 +191,7 @@ services:
       net.ipv6.fib_multipath_hash_policy: ${EGRESS_HASH_POLICY:-0}
     environment:
       EGRESS_MODE: ${EGRESS_MODE:-failover}
+      HEALTH_REQUIRE_EGRESS: ${HEALTH_REQUIRE_EGRESS:-1}
       APP_PORT: ${APP_PORT}
       # Couples « ip:port » en plus de Caddy -> APP_PORT. Vides ici : l'application d'exemple n'en a pas besoin.
       ALLOW_IN: ""          # ex. "172.30.20.11:4041" : un second client du LAN qui appelle l'application
@@ -218,8 +222,9 @@ services:
       - measure-vpn2:/run/gateway-measure/vpn2:ro
       - measure-vpn3:/run/gateway-measure/vpn3:ro
     healthcheck:
-      # "healthy" = firewall fail-closed chargé (PAS "un VPN est up") : l'app peut démarrer sans risque.
-      test: ["CMD", "nft", "list", "table", "inet", "vpngw"]
+      # "healthy" = firewall fail-closed chargé ET sortie réelle établie (un VPN validé par les sondes). L'app ne démarre donc
+      # qu'avec Internet. HEALTH_REQUIRE_EGRESS=0 : seulement le firewall (l'app démarre sans sortie, elle n'a simplement pas Internet).
+      test: ["CMD-SHELL", "nft list table inet vpngw >/dev/null && { [ \"$${HEALTH_REQUIRE_EGRESS:-1}\" = 0 ] || [ \"$$(cat /run/gateway/active)\" != none ]; }"]
       interval: 10s
       start_period: 5s
     networks:

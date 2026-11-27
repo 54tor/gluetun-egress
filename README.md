@@ -216,6 +216,7 @@ cp .env.example .env && chmod 600 .env
 | `APP_PORT` | `8080` | Port d'écoute de l'app (utilisé par Caddy et par le firewall du gateway) |
 | `PROBE_URLS` | `https://1.1.1.1/ https://8.8.8.8/ https://9.9.9.9/` | Cibles des sondes, par IP (aucune dépendance DNS). Une seule réponse suffit, quel que soit le code HTTP |
 | `EGRESS_MODE` | `failover` | `failover` : le premier VPN en vie porte tout. `balance-dest` : répartition entre tous les VPN en vie, une destination gardant le même VPN (poser `EGRESS_HASH_POLICY=0`). `balance-flow` : répartition par connexion, l'IP de sortie varie d'une connexion à l'autre (`EGRESS_HASH_POLICY=1`). Un VPN mort est retiré de la route à `FAIL_THRESHOLD` ; ses connexions meurent. |
+| `HEALTH_REQUIRE_EGRESS` | `1` | `1` : le gateway n'est *healthy* qu'une fois le firewall chargé **et** un VPN validé par les sondes (sortie réelle). `0` : firewall seul, l'app démarre sans Internet |
 | `PROBE_INTERVAL` | `5` | Secondes entre deux cycles de sondes |
 | `PROBE_INTERVAL_DOWN` | `1` | Secondes entre deux cycles tant qu'aucun VPN n'est validé en IPv4 : la première sortie arrive après `RISE_THRESHOLD` secondes au lieu de `RISE_THRESHOLD × PROBE_INTERVAL` |
 | `PROBE_TIMEOUT` | `4` | Timeout de chaque requête de sonde |
@@ -329,8 +330,9 @@ docker compose logs -f gateway
 
 Ordre imposé par `depends_on` : chaque `wgentryN` attend que `gluetunN` soit *healthy* ; l'app
 attend que le gateway soit *healthy*. **Healthy, pour le gateway, signifie « firewall fail-closed
-chargé », pas « un VPN est up »** : l'app peut démarrer sans risque avant qu'un VPN soit validé ; elle
-n'a simplement pas d'Internet tant que c'est le cas.
+chargé et un VPN validé par les sondes »** : l'app ne démarre qu'avec une sortie réelle. Avec
+`HEALTH_REQUIRE_EGRESS=0`, healthy se limite au firewall : l'app démarre sans risque avant qu'un VPN soit
+validé, mais sans Internet tant que c'est le cas.
 
 Au premier démarrage, NordVPN et un profil `custom` peuvent enchaîner plusieurs tentatives avant un handshake
 WireGuard réussi (5 à 11 observées) : c'est normal, Gluetun change de serveur et réessaie.
@@ -609,6 +611,7 @@ au-delà, le serveur est gardé un contrôle de plus, le conteneur reste *unheal
 | `VPN_CHECK_OOKLA_RETRY_SECONDS` | `3600` (délai avant de retenter un téléchargement ou un contrôle en échec) |
 | `VPN_CHECK_RECHECK_SECONDS` | `3600` (`0` : jamais, un serveur validé n'est pas retesté tant que l'IP ne change pas) |
 | `VPN_CHECK_FAST_START` | `1` : le Gluetun est déclaré sain dès que sa sonde native passe, sans attendre le speedtest ; la mesure et les remplacements de serveur se font ensuite en tâche de fond (un remplacement coupe brièvement le tunnel, les dépendants sont relancés). `0` : un `depends_on: service_healthy` n'aboutit qu'avec un serveur validé |
+| `VPN_CHECK_REROLL_ONLY_IF_OTHER_UP` | `1` : un serveur recalé (débit, latence…) n'est remplacé que si un autre tunnel est en vie (exige `VPN_CHECK_NAME`) ; sinon il est gardé, et remplacé dès qu'un autre tunnel est établi. `0` : remplacé tout de suite |
 | `VPN_CHECK_NAME` | `vpn1`, `vpn2`… : le nom du tunnel côté gateway (rang dans `VPN_IPS`), requis pour le retest |
 
 Câblage (pas à pas au §3.2.1) : `vpn-check.sh` est livré **dans l'image du gateway**, qui le dépose à chaque
@@ -915,7 +918,7 @@ le premier à saturer. Ajouter des tunnels n'ajoute de la capacité qu'avec `lb_
   distinguables de l'extérieur ; le `ping` du Gluetun distingue seulement « Gluetun joignable ».
 - **Pas de `conntrack`** : le gateway ne fait pas de NAT, rien à purger lors d'une bascule.
 - **Pas de `healthcheck.sh`** : le healthcheck Docker du gateway est une seule commande
-  (`nft list table inet vpngw`).
+  (`nft list table inet vpngw` et `/run/gateway/active` différent de `none`).
 - **Profil `custom`** : endpoint figé en IP (exigence de Gluetun), pas d'IPv6 : il n'a donc pas d'entrée dans `VPN_IPS6`.
 - **Failover de 40 s environ** : compromis entre réactivité et stabilité, réglable (§6).
 
